@@ -1,0 +1,29 @@
+# Cookies & Secrets — NIEMALS committen
+data/*cookies*.json
+*_cookies.json
+li_cookies.json
+/tmp/li_cookies.json
+
+# Rohe Captures (können Session-Daten / persönliche Inhalte enthalten)
+_captures/
+_captures2/
+_writes/
+_data_*.json
+_sdui_*.json
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# MCP server
+mcp/.venv/
+mcp/**/__pycache__/
+~/.hermes/li-mcp-profile/
+mcp/lib/__pycache__/
+login_once.py

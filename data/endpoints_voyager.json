@@ -1,0 +1,1124 @@
+[
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerGlobalAlerts",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerGlobalAlerts?adHocAlerts=true&alertWithActions=true&q=findAlerts",
+    "area": "Settings/Other",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerSegmentsDashChameleonConfig",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerSegmentsDashChameleonConfig",
+    "area": "Settings/Other",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashGlobalNavs.5e79c576bb420351fa8ff438d86b2c31",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerFeedDashGlobalNavs.5e79c576bb420351fa8ff438d86b2c31",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "me",
+    "url_sample": "https://www.linkedin.com/voyager/api/me",
+    "area": "Identity/Profile",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "premium/featureAccess",
+    "url_sample": "https://www.linkedin.com/voyager/api/premium/featureAccess?name=reactivationFeaturesEligible",
+    "area": "Premium",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashProfiles.b5c27c04968c409fc0ed3546575b9b7a",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(memberIdentity:OWNER_PROFILE_ID)&queryId=voyagerIdentityDashProfiles.b5c27c04968c409fc0ed3546575b",
+    "area": "Identity/Profile",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashThirdPartyIdSyncs.e9d3044f7ad311ff359561b405629210",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&queryId=voyagerFeedDashThirdPartyIdSyncs.e9d3044f7ad311ff359561b405629210",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerIdentityDashNotificationCards",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerIdentityDashNotificationCards?decorationId=com.linkedin.voyager.dash.deco.identity.notifications.CardsCollectionWithInjectionsNoPills-24&count=10&q=filterVa",
+    "area": "Identity/Profile",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobSeekerPreferences.53d4a0b454b82ce339abf8afc2c65190",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerJobsDashJobSeekerPreferences.53d4a0b454b82ce339abf8afc2c65190",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerDashMySettings.8fdc6cac2e41f88f83e8d17dc78ac26c",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerDashMySettings.8fdc6cac2e41f88f83e8d17dc78ac26c",
+    "area": "Settings/Other",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerLegoDashPageContents.6e5607181411f5835938e105d18564e2",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(pageKey:messaging_realtime,slotId:onboarding)&queryId=voyagerLegoDashPageContents.6e5607181411f5835938e105d18564e2",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerPremiumDashFeatureAccess.c87b20dac35795f9920f2a8072fd7af5",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(featureAccessTypes:List(CAN_ACCESS_AWAY_MESSAGES))&queryId=voyagerPremiumDashFeatureAccess.c87b20dac35795f9920f2a8072fd7",
+    "area": "Premium",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerMessagingDashMessagingSettings.a555e413ad439d1d3f58ceef31ff0728",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerMessagingDashMessagingSettings.a555e413ad439d1d3f58ceef31ff0728",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerOrganizationDashPageMailbox/",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerOrganizationDashPageMailbox/?count=3&q=admin",
+    "area": "Organization",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerConversations.0d5e6781bbee71c3e51c8843c6519f48",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerConversations.0d5e6781bbee71c3e51c8843c6519f48&variables=(mailboxUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerMessagingDashAffiliatedMailboxes.da7e8047e61ae87c4b97ee31fed7d934",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&queryId=voyagerMessagingDashAffiliatedMailboxes.da7e8047e61ae87c4b97ee31fed7d934",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerNotificationsDashBadgingItemCounts",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerNotificationsDashBadgingItemCounts",
+    "area": "Notifications",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerMessagingDashAwayStatusV2.ee0ba3add6f8a58c35df3e08daa87b11",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&queryId=voyagerMessagingDashAwayStatusV2.ee0ba3add6f8a58c35df3e08daa87b11",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "messaging/dash/presenceStatuses",
+    "url_sample": "https://www.linkedin.com/voyager/api/messaging/dash/presenceStatuses",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": "ids=List(urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID)"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerMailboxCounts.fc528a5a81a76dff212a4a3d2d48e84b",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerMailboxCounts.fc528a5a81a76dff212a4a3d2d48e84b&variables=(mailboxUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerMessagingDashSecondaryInbox",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingDashSecondaryInbox?q=previewBanner",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerMessagingDashConversationNudges",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingDashConversationNudges",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashProfiles.4be600f2992df8cd036dba7aef973bab",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(profileId:urn%3Ali%3Afsd_profile%3AOTHER_PROFILE_ID)&queryId=voyagerIdentityDashProfiles.4be600f2",
+    "area": "Identity/Profile",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerOnboardingDashMemberHandles",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerOnboardingDashMemberHandles?primary=true&q=criteria&type=EMAIL",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerMessages.5846eeb71c981f11e0134cb6626cc314",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerMessages.5846eeb71c981f11e0134cb6626cc314&variables=(conversationUrn:urn%3Ali%3Amsg_conversation%3A%28urn%3Ali%3Af",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerMessagingDashMessagingBadge",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingDashMessagingBadge?action=markAllMessagesAsSeen",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": "{\"until\":1783720782358}"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerMessagingDashComposeViewContexts.e15a66a8288033ed20e84acb49714a78",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(recipients:List(urn%3Ali%3Afsd_profile%3AOTHER_PROFILE_ID),type:REPLY,contextEntityUrn:urn%3Ali%3",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerContentcreationDashUpdateUrlPreview.b092c1aea4b6c087ec0d09614b3b3320",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(url:https%3A%2F%2Fspreadapi.io,authorizedEntity:(entityUnion:(conversationUrn:urn%3Ali%3Amsg_conversation%3A%28urn%3Ali%",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "identity/dash/profiles/urn:li:fsd_profile:OWNER_PROFILE_ID",
+    "url_sample": "https://www.linkedin.com/voyager/api/identity/dash/profiles/urn:li:fsd_profile:OWNER_PROFILE_ID?decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfile-76",
+    "area": "Identity/Profile",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerMessagingDashMessengerMessageDeliveryAcknowledgements",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingDashMessengerMessageDeliveryAcknowledgements?action=sendDeliveryAcknowledgement",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": "{\"messageUrns\":[\"urn:li:msg_message:(urn:li:fsd_profile:OWNER_PROFILE_ID,2-MESSAGE_ID)\"],\"clientId\""
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerSeenReceipts.dc29d9bcecad524b9dd264acbbde3b5c",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerSeenReceipts.dc29d9bcecad524b9dd264acbbde3b5c&variables=(conversationUrn:urn%3Ali%3Amsg_conversation%3A%28urn%3Ali",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerQuickReplies.4338d226319203b5b08920ab7621fa45",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerQuickReplies.4338d226319203b5b08920ab7621fa45&variables=(conversationUrn:urn%3Ali%3Amsg_conversation%3A%28urn%3Ali",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerMessages.d8ea76885a52fd5dc5c317078ab7c977",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerMessages.d8ea76885a52fd5dc5c317078ab7c977&variables=(deliveredAt:1783597394424,conversationUrn:urn%3Ali%3Amsg_conv",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashProfiles.da93c92bffce3da586a992376e42a305",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(profileUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID)&queryId=voyagerIdentityDashProfiles.da93c92",
+    "area": "Identity/Profile",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerPremiumDashUpsellSlotContent.cb21d2bd460f3c55ceed3c190756a060",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(slotType:MESSAGING_RIGHT_RAIL)&queryId=voyagerPremiumDashUpsellSlotContent.cb21d2bd460f3c55ceed3c190756a060",
+    "area": "Messaging",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerNotificationsDashBadge",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerNotificationsDashBadge?action=markAllItemsAsSeen",
+    "area": "Notifications",
+    "response_len": 0,
+    "postData": "{\"notificationFilterUrn\":\"urn:li:fsd_notificationFilter:ALL\",\"until\":1783720797188}"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerOrganizationDashCompanies.2fce873504d824e22294f312f718b4c7",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:10,start:0,viewerPermissions:(canReadOrganizationUpdateAnalytics:true))&queryId=voyagerOrganizationDashCompanies.2",
+    "area": "Organization",
+    "response_len": 13083,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashProfiles.e9b0809465a07db1f02e70a82d455e10",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(memberIdentity:OWNER_PROFILE_ID)&queryId=voyagerIdentityDashProfiles.e9b0809465a07db1f02e70a82d45",
+    "area": "Identity/Profile",
+    "response_len": 36647,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashIdentityModule.803fe19f843a4d461478049f70d7babd",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerFeedDashIdentityModule.803fe19f843a4d461478049f70d7babd",
+    "area": "Feed/Posts",
+    "response_len": 12539,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashPackageRecommendations.a17e2926893fd3ff632c189cd61176d1",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(supportedEntityTypes:List(TOPIC,PROFESSIONAL_EVENT,GROUP))&queryId=voyagerFeedDashPackageRecommendations.a17e2926893fd3f",
+    "area": "Feed/Posts",
+    "response_len": 13964,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "publishing/editorFirstPartyArticles",
+    "url_sample": "https://www.linkedin.com/voyager/api/publishing/editorFirstPartyArticles?q=author&author=urn%3Ali%3Afs_miniProfile%3AOWNER_PROFILE_ID&state=DRAFT&count=0",
+    "area": "Misc",
+    "response_len": 231,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashMainFeed.5c6157cdad2a34970e85f40c8f93ca2b",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(start:0,count:3,sortOrder:MEMBER_SETTING)&queryId=voyagerFeedDashMainFeed.5c6157cdad2a34970e85f40c8f93ca2b",
+    "area": "Feed/Posts",
+    "response_len": 233521,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerContentcreationDashClosedSharebox",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerContentcreationDashClosedSharebox?feedType=MAIN_FEED&q=feedType&decorationId=com.linkedin.voyager.dash.deco.contentcreation.closedSharebox-8",
+    "area": "Feed/Posts",
+    "response_len": 7359,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashTopics.9075cab8b59e14d62b497b48f77d5e12",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:10)&queryId=voyagerFeedDashTopics.9075cab8b59e14d62b497b48f77d5e12",
+    "area": "Feed/Posts",
+    "response_len": 23072,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerLaunchpadDashLaunchpadViews",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerLaunchpadDashLaunchpadViews?decorationId=com.linkedin.voyager.dash.deco.launchpad.LaunchpadView-97&q=context&launchpadContext=FEED",
+    "area": "Settings/Other",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "relationships/invitationsSummary",
+    "url_sample": "https://www.linkedin.com/voyager/api/relationships/invitationsSummary",
+    "area": "Network",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "relationships/connectionsSummary",
+    "url_sample": "https://www.linkedin.com/voyager/api/relationships/connectionsSummary",
+    "area": "Network",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "relationships/invitationViews",
+    "url_sample": "https://www.linkedin.com/voyager/api/relationships/invitationViews?includeInsights=true&q=receivedInvitation&start=0&count=3",
+    "area": "Network",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "growth/socialproofs",
+    "url_sample": "https://www.linkedin.com/voyager/api/growth/socialproofs?q=socialProofType&type=RELEVANCE&count=4",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "relationships/myNetworkNotifications",
+    "url_sample": "https://www.linkedin.com/voyager/api/relationships/myNetworkNotifications",
+    "area": "Network",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobPostingDetailSections.77cb64956921ef397a36de4f7f8bce47",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?variables=(cardSectionTypes:List(JSERP_SEEKER_NEXT_BEST_ACTION_CARDS),jobPostingUrn:urn%3Ali%3Afsd_jobPosting%3AJOB_ID,includeSecondaryActionsV2:true)&",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerTalentbrandDashCandidateInterestMember.d831bf85b9873ef0228a2bab19781290",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(companyUrn:urn%3Ali%3Afsd_company%3ACOMPANY_ID)&queryId=voyagerTalentbrandDashCandidateInterestMember.d831bf85b9873ef0228a2b",
+    "area": "Organization",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerOrganizationDashCompanies.148b1aebfadd0a455f32806df656c3c1",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(universalName:COMPANY_NAME)&queryId=voyagerOrganizationDashCompanies.148b1aebfadd0a455f32806df656c3c1",
+    "area": "Organization",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerOrganizationDashInformationCallout",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerOrganizationDashInformationCallout?informationCalloutContext=TOP_CARD_MEMBER_VIEW&organizationalPage=urn%3Ali%3Afsd_organizationalPage%3AORG_PAGE_ID&q=organiza",
+    "area": "Organization",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "notifications/dash/edgesetting/urn:li:fsd_edgeSetting:urn:li:fsd_company:COMPANY_ID",
+    "url_sample": "https://www.linkedin.com/voyager/api/notifications/dash/edgesetting/urn:li:fsd_edgeSetting:urn:li:fsd_company:COMPANY_ID?decorationId=com.linkedin.voyager.dash.deco.identity.notifications.FullEdgeSettin",
+    "area": "Notifications",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerSearchDashClusters.a7a0567fa66c52d645b5ff2f960b92aa",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(start:0,origin:FACETED_SEARCH,query:(flagshipSearchIntent:ORGANIZATIONS_PEOPLE_ALUMNI,queryParameters:List((key:currentC",
+    "area": "Search",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerOrganizationDashDiscoverCardGroups.faf15c48adb2a3a65e8dd984b743394e",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(memberTabType:PEOPLE,organizationVanityName:COMPANY_NAME)&queryId=voyagerOrganizationDashDiscoverCardGroups.faf15c48adb2a3a",
+    "area": "Organization",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashProfileComponents.86824295e1093fb0f5acdd8d57213aaa",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(profileUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID,sectionType:content-collections)&queryId=voy",
+    "area": "Identity/Profile",
+    "response_len": 118526,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashProfileCards.aec4c2601fac8c5f615c7630b8db1ab3",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(profileUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID,sectionType:CONTENT_COLLECTIONS_DETAILS)&que",
+    "area": "Identity/Profile",
+    "response_len": 329371,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashProfileUpdates.20c70fe0314184158516a7ec004c0408",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:20,start:0,profileUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID)&queryId=voyagerFeedDashPro",
+    "area": "Feed/Posts",
+    "response_len": 467312,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "inSessionRelevanceVoyagerFeedDashClientSignal.d14b45e21b8bec350407b606edf9cba0",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?action=execute&queryId=inSessionRelevanceVoyagerFeedDashClientSignal.d14b45e21b8bec350407b606edf9cba0",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": "{\"variables\":{\"backendUpdateUrn\":\"urn:li:activity:ACTIVITY_ID\",\"duration\":\"159464\",\"durationStartTime\":\"1783720315133\"},\"queryId\":\"inSessionRelevanceVoyagerFeedDashClientSignal.d14b45e21b8bec3"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashProfileUpdates.81bef031b9f0920ede4b0c9983e3744c",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:20,start:0,profileUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID)&queryId=voyagerFeedDashPro",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashProfileUpdates.d6bd2ffe955d1ba0d19440ec139f0666",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:20,start:0,profileUrn:urn%3Ali%3Afsd_profile%3AOWNER_PROFILE_ID)&queryId=voyagerFeedDashPro",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobCards.9c135b2568ee44623733b4a578d25279",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(jobPostingDetailDescription_start:0,jobPostingDetailDescription_count:5,jobCardPrefetchQuery:(prefetchJobPostingCardUrns",
+    "area": "Search",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobSearchHistories.220d01e7d55ec8363130acffb73298ff",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:20,start:0,jobSearchType:SEMANTIC)&queryId=voyagerJobsDashJobSearchHistories.220d01e7d55ec8363130acffb73298ff",
+    "area": "Search",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashLocationSuggestions.c5a03455b489e62d92bbf5bb089f619e",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerJobsDashLocationSuggestions.c5a03455b489e62d92bbf5bb089f619e",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobSearchSuggestionComponents.04e260716e8739f78bad924422f85f2f",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:7)&queryId=voyagerJobsDashJobSearchSuggestionComponents.04e260716e8739f78bad924422f85f2f",
+    "area": "Search",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerDashGeo.8909acb4ad554861d9693b15249caf61",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerDashGeo.8909acb4ad554861d9693b15249caf61",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "identity/normalizedProfiles/OWNER_PROFILE_ID",
+    "url_sample": "https://www.linkedin.com/voyager/api/identity/normalizedProfiles/OWNER_PROFILE_ID?decorationId=com.linkedin.voyager.deco.identity.normalizedprofile.shared.WebApplicantProfile-13",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobPostings.891aed7916d7453a37e4bbf5f1f60de4",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(jobPostingUrn:urn%3Ali%3Afsd_jobPosting%3AJOB_ID)&queryId=voyagerJobsDashJobPostings.891aed7916d7453a37e4bbf5f1f60de",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerJobsDashJobSeekerPreferences",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerJobsDashJobSeekerPreferences?decorationId=com.linkedin.voyager.dash.deco.jobs.FullJobSeekerPreference-8",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerTalentbrandDashTargetedContents.1662b25622fa5eaba012696316461035",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(jobPostingUrn:urn%3Ali%3Afsd_jobPosting%3AJOB_ID)&queryId=voyagerTalentbrandDashTargetedContents.1662b25622fa5eaba01",
+    "area": "Talentbrand",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerFeedDashOrganizationalPageUpdates.9e7a905afe23cba60c62b452066bf7d7",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?variables=(count:10,start:3,moduleKey:ORGANIZATION_MEMBER_FEED_DESKTOP,organizationalPageUrn:urn%3Ali%3Afsd_organizationalPage%3AORG_PAGE_ID)&queryId=voyagerF",
+    "area": "Feed/Posts",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerSearchDashLazyLoadedActions.3a131e1ec0f98666d762cda12366ccea",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(lazyLoadedActionsUrns:List(urn%3Ali%3Afsd_lazyLoadedActions%3A%28urn%3Ali%3Afsd_profileActions%3A%28OTHER_PROFILE_ID",
+    "area": "Search",
+    "response_len": 87045,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:1,start:0)&queryId=voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815",
+    "area": "Jobs",
+    "response_len": 110154,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "messengerMailboxRealtimeSubscriptionAuthorizationTokens.1a3b0efc0a0a2c24c23367b5f8a25e62",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerMessagingGraphQL/graphql?queryId=messengerMailboxRealtimeSubscriptionAuthorizationTokens.1a3b0efc0a0a2c24c23367b5f8a25e62&variables=(mailboxUrn:urn%3Ali%3Af",
+    "area": "Messaging",
+    "response_len": 3672,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerLegoDashWidgetImpressionEvents",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerLegoDashWidgetImpressionEvents",
+    "area": "Events",
+    "response_len": 0,
+    "postData": "{\"trackingToken\":\"cjRBuCBjum5Is7dFp2oMbz0Zpn9LoRdT9zROol1Ipl9T9zRArQRIpl9T9zAVejAVfmhBt7dBtn5BkCRRrypejQBkildfk3RVgD9Bp79ft6lDp6BT9CNBoC5InTtBrBZPoCZGnSVFrmhxnQ4P9ndBpS5MnQ4P9mpFpzRAinhBpShFtOoMfmVLqn"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerPremiumDashUpsellSlotContent.59114115a17b6a93502faec8f3fadf6b",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?variables=(vieweeCompanyUrn:urn%3Ali%3Afsd_company%3ACOMPANY_ID,slotUrn:urn%3Ali%3Afsd_premiumUpsellSlot%3APREMIUM_PAGE_ADMIN_HOME_MULTI_VALUE)&queryId=voya",
+    "area": "Organization",
+    "response_len": 8198,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerTalentbrandDashCandidateInterestAdmin.7ce96d008cea14b03263ce4bffb00096",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(companyUrn:urn%3Ali%3Afsd_company%3ACOMPANY_ID)&queryId=voyagerTalentbrandDashCandidateInterestAdmin.7ce96d008cea14b03263",
+    "area": "Organization",
+    "response_len": 9297,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerLegoDashWidgetActionEvents",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerLegoDashWidgetActionEvents",
+    "area": "Events",
+    "response_len": 0,
+    "postData": "{\"trackingToken\":\"0NfmlWqldVomNMsSBA9z0Kc3RBsCZzkTsCfn9xk6NBkDsCfmhLjmNBkDsCcjRApnhPpnlNpl9JtmUCjAZ9l4BjjR0Zuk9OpmhOjThBpShFtOpQpmtAqntvsClFpCBQrClAqlZQrSNPnStKqmhOomZyrCZvgjcBu7lFpBZ1cOlCqmoZp4BQpmtA"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerPremiumDashAnalyticsView.677f8e447e2d15652410d574abfe1d1e",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(analyticsEntityUrn:(company:urn%3Ali%3Afsd_company%3ACOMPANY_ID),surfaceType:PAGE_ACTIVITY_RIGHT_RAIL)&queryId=voyagerPre",
+    "area": "Organization",
+    "response_len": 87816,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerOrganizationDashNotificationCounts.a6ef8bce390030a050e51c825d1e1eef",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(organization:urn%3Ali%3Afsd_company%3ACOMPANY_ID,updateLastVisit:true)&queryId=voyagerOrganizationDashNotificationCounts.",
+    "area": "Notifications",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerTalentbrandDashOrganizationLifePageTrafficStatistics.6342711231e2205554d6740d552f8426",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(companyUrn:urn%3Ali%3Afsd_company%3ACOMPANY_ID,status:PUBLISHED,timeRange:(start:1782345600000,end:1783641600000),count:1",
+    "area": "Organization",
+    "response_len": 7791,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerPremiumDashPremiumChooserFlow.e9f6f9ca895fa4a332189cfc6eb281a8",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(trackingContext:(contentTrackingId:O%03%25F%C2%96%3DA%C3%AB%C2%96%C3%88%C2%88%C3%83%C3%90%0B%C3%8E%C2%A8,referenceId:3WC",
+    "area": "Organization",
+    "response_len": 48530,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerDashLanguageSelection",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerDashLanguageSelection?q=languages",
+    "area": "Misc",
+    "response_len": 4403,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerRelationshipsDashDiscovery",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerRelationshipsDashDiscovery?decorationId=com.linkedin.voyager.dash.deco.relationships.DiscoveryEntityCollection-37&count=5&paginationToken=4707675265&q=cohor",
+    "area": "Network",
+    "response_len": 88302,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerGroupsDashGroups/urn:li:fsd_group:GROUP_ID",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerGroupsDashGroups/urn:li:fsd_group:GROUP_ID?decorationId=com.linkedin.voyager.dash.deco.groups.GroupDetailPage-43",
+    "area": "Groups",
+    "response_len": 78419,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerEventsDashEventsCardGroupResource.76207ae0cd3b83dc7ea5b00903bc9ed3",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerEventsDashEventsCardGroupResource.76207ae0cd3b83dc7ea5b00903bc9ed3",
+    "area": "Events",
+    "response_len": 237743,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerContentcreationDashSharebox.6065bbd24f145384527c50bfc0c387ed",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?action=execute&queryId=voyagerContentcreationDashSharebox.6065bbd24f145384527c50bfc0c387ed",
+    "area": "Feed/Posts",
+    "response_len": 48189,
+    "postData": "{\"variables\":{\"origin\":\"FEED\"},\"queryId\":\"voyagerContentcreationDashSharebox.6065bbd24f145384527c50bfc0c387ed\",\"includeWebMetadata\":true}"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerContentcreationDashGuiderPrompts",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerContentcreationDashGuiderPrompts?decorationId=com.linkedin.voyager.dash.deco.contentcreation.GuiderPrompt-11&hasAttachment=false&q=highestPriorityTriggeredP",
+    "area": "Feed/Posts",
+    "response_len": 7033,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerOrganizationDashViewWrapper.8d20f7b47ae1c746f3198561c595895e",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(organizationalPageUrn:urn%3Ali%3Afsd_organizationalPage%3AORG_PAGE_ID,context:ORGANIZATIONAL_PAGE_MEMBER_HOME)&queryId=voya",
+    "area": "Organization",
+    "response_len": 454991,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerMessagingDashRecipientSuggestions.0623e89a6faf64755e04151fc3d5dced",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:20,start:0,companyUrn:urn%3Ali%3Afsd_company%3ACOMPANY_ID)&queryId=voyagerMessagingDashRecipientSuggestions.0623e89a",
+    "area": "Messaging",
+    "response_len": 20332,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerMarketplacesDashSimilarServiceProvidersView.ebe089e3081272020de3b4d2d32d5ec5",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(vanityName:MARKETPLACE_ID)&queryId=voyagerMarketplacesDashSimilarServiceProvidersView.ebe089e3081272020de3b4d2d32d5e",
+    "area": "Misc",
+    "response_len": 66516,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerNewsDashStorylines.c042ce89aeaa19a94ba27cf715164f46",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerNewsDashStorylines.c042ce89aeaa19a94ba27cf715164f46",
+    "area": "Misc",
+    "response_len": 19612,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashGameEntryPoints.67a406e3f9e3a8305fa432f77157bead",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(gameEntryPointType:NEWS)&queryId=voyagerIdentityDashGameEntryPoints.67a406e3f9e3a8305fa432f77157bead",
+    "area": "Identity/Profile",
+    "response_len": 8368,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerIdentityDashGameEntryPoints.4666a73a66c1a9663577e1c37f1ac13a",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(gameEntryPointType:GAME_HUB)&queryId=voyagerIdentityDashGameEntryPoints.4666a73a66c1a9663577e1c37f1ac13a",
+    "area": "Identity/Profile",
+    "response_len": 6918,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobSeekerUpdates.b2ecb69b3e0f6f22f4a0d8d32c070c83",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerJobsDashJobSeekerUpdates.b2ecb69b3e0f6f22f4a0d8d32c070c83",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashNavigationPanel.0d3dbfde78d0547cb1d03d910d14f602",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerJobsDashNavigationPanel.0d3dbfde78d0547cb1d03d910d14f602",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashNavigationPanel.e161df0f6116399fa0059aaf1bf736bc",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=()&queryId=voyagerJobsDashNavigationPanel.e161df0f6116399fa0059aaf1bf736bc",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobsFeed.711cec89dd87dcf89df6a9d6e7ab5682",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(paginationToken:aq4VnwzPOiDUNC1%2BFapZi4%2BMFAWsP3whzlQ%2FqndN)&queryId=voyagerJobsDashJobsFeed.711cec89dd87dcf89df6a9d6",
+    "area": "Jobs",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerJobsDashJobPostings",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerJobsDashJobPostings?action=validateFields",
+    "area": "Jobs",
+    "response_len": 1222,
+    "postData": "{\"jobPosting\":{\"title\":\"\",\"companyDetails\":{\"jobCompanyUnion\":{\"company\":\"urn:li:fsd_company:COMPANY_ID\"}},\"locationUrn\":\"urn:li:fsd_geo:GEO_ID\"}}"
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerHiringDashJobPostingFlowEligibilities.23b8178f769be71e0f473a72de4ccbee",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?variables=(trackingId:%2F%C3%8D%C3%8B%C2%82%C2%AFaGP%C2%9A%C3%BE%18U2%C2%B1%0B%2F)&queryId=voyagerHiringDashJobPostingFlowEligibilities.23b8178f769be71e0f4",
+    "area": "Misc",
+    "response_len": 1532,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashJobCards.e5b6b761ede078dabe8ad857aa42c220",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:24,jobCollectionSlug:recommended,query:(origin:GENERIC_JOB_COLLECTIONS_LANDING),start:0)&queryId=voyagerJobsDashJo",
+    "area": "Jobs",
+    "response_len": 186855,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashOnsiteApplyApplication.96a2a30d12bccaec2b5ba9acbcbbf97c",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(jobPostingUrn:urn%3Ali%3Afsd_jobPosting%3AJOB_ID)&queryId=voyagerJobsDashOnsiteApplyApplication.96a2a30d12bccaec2b5b",
+    "area": "Jobs",
+    "response_len": 246392,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerHiringDashJobHiringSocialHirersCards",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerHiringDashJobHiringSocialHirersCards?decorationId=com.linkedin.voyager.dash.deco.hiring.FullJobHiringSocialHirersCard-9&jobPosting=urn%3Ali%3Afsd_jobPosting",
+    "area": "Misc",
+    "response_len": 27361,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerJobsDashNavigationPanel.00e17eebd503c82434a0717b64fd0a4b",
+    "url_sample": "https://www.linkedin.com/voyager/api/graphql?includeWebMetadata=true&variables=(count:10,start:0,collectionSlugNames:List(recommended),discoveryOrigin:JOBS_HOME_JYMBII)&queryId=voyagerJobsDashNavigati",
+    "area": "Jobs",
+    "response_len": 26524,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerJobsDashSearchFilterClustersResource",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerJobsDashSearchFilterClustersResource?decorationId=com.linkedin.voyager.dash.deco.search.SearchFilterCluster-44&q=filters&query=(origin:JOBS_HOME_JYMBII,spel",
+    "area": "Search",
+    "response_len": 88460,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerJobsDashJobCards",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerJobsDashJobCards?decorationId=com.linkedin.voyager.dash.deco.jobs.search.JobSearchCardsCollection-220&count=25&q=jobSearch&query=(origin:JOBS_HOME_JYMBII,sp",
+    "area": "Search",
+    "response_len": 373786,
+    "postData": null
+  },
+  {
+    "method": "GET",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "growth/pageContent/job_search",
+    "url_sample": "https://www.linkedin.com/voyager/api/growth/pageContent/job_search?",
+    "area": "Search",
+    "response_len": 7469,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerJobsDashJobSearchHistories",
+    "url_sample": "https://www.linkedin.com/voyager/api/voyagerJobsDashJobSearchHistories?action=addFromQuery",
+    "area": "Search",
+    "response_len": 0,
+    "postData": "{\"query\":{\"origin\":\"JOBS_HOME_JYMBII\",\"locationUnion\":{\"geoUrn\":\"urn:li:fsd_geo:GEO_ID\"},\"spellCorrectionEnabled\":true},\"referenceId\":\"$Mzö\\u0015òÿ¹À39Ùp\",\"jobSearchType\":\"CLASSIC\"}"
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "REST",
+    "family": "voyagerSocialDashReactions",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Set like — HTTP 201"
+  },
+  {
+    "method": "POST",
+    "layer": "VOYAGER",
+    "type": "GQL",
+    "family": "voyagerContentcreationDashShares.<hash>",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Create post — verified (GraphQL)"
+  }
+]

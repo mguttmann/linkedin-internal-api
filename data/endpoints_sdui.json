@@ -1,0 +1,298 @@
+[
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "rsc-action",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/app-config",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": "{}"
+  },
+  {
+    "method": "GET",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.realtimeDefaultHandler",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-stream-request?sduiid=com.linkedin.sdui.realtimeDefaultHandler&payload=%7B%22requestId%22%3A%22com.linkedin.sdui.realtimeDefaultHandler%",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": null
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.pagers.feed.mainFeed",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/pagination?sduiid=com.linkedin.sdui.pagers.feed.mainFeed&parentSpanId=foRfLLIhNWk%3D",
+    "area": "Feed/Posts",
+    "response_len": 10724184,
+    "postData": "{\"pagerId\":\"com.linkedin.sdui.pagers.feed.mainFeed\",\"clientArguments\":{\"$type\":\"proto.sdui.actions.requests.RequestedArguments\",\"payload\":{\"startIndex\":3,\"count\":5,\"token\":\"OWNER_PLAIN_ID-1783767669789-afb"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.impl.homenav.requests.getThirdPartyTrackingPixels",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.impl.homenav.requests.getThirdPartyTrackingPixels&parentSpanId=gEdh26P04%2BI%3D",
+    "area": "Misc",
+    "response_len": 1036,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.impl.homenav.requests.getThirdPartyTrackingPixels\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.impl.homenav.requests.getThirdPartyTrackingPixels\",\"requestedArgument"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.mynetwork.mojoTabsBadge",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.mynetwork.mojoTabsBadge&parentSpanId=lgjwcOTqUoc%3D",
+    "area": "Network",
+    "response_len": 1008,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.mojoTabsBadge\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.mojoTabsBadge\",\"requestedArguments\":{\"$type\":\"proto.sdui.actions.re"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.mynetwork.addaClearUnseenInvitationsMutation",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.mynetwork.addaClearUnseenInvitationsMutation&parentSpanId=jm3ehe159Ro%3D",
+    "area": "Network",
+    "response_len": 576,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.addaClearUnseenInvitationsMutation\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.addaClearUnseenInvitationsMutation\",\"requested"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.mynetwork.addaMarkNotificationsSeen",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.mynetwork.addaMarkNotificationsSeen&parentSpanId=x19CNApSfwo%3D",
+    "area": "Network",
+    "response_len": 0,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.addaMarkNotificationsSeen\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.addaMarkNotificationsSeen\",\"requestedArguments\":{\"$type"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.generated.jobseeker.dsl.impl.jobSearchBox",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/component?componentId=com.linkedin.sdui.generated.jobseeker.dsl.impl.jobSearchBox&sduiid=com.linkedin.sdui.generated.jobseeker.dsl.impl.jobSear",
+    "area": "Search",
+    "response_len": 46888,
+    "postData": "{\"clientArguments\":{\"payload\":{\"typeaheadHostingScreen\":\"JobsHome\"},\"states\":[],\"requestMetadata\":{\"$type\":\"proto.sdui.common.RequestMetadata\"},\"screenId\":\"com.linkedin.sdui.flagshipnav.home.Home\"}}"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.pagers.jobseeker.jobsHomeFeedModuleList",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/pagination?sduiid=com.linkedin.sdui.pagers.jobseeker.jobsHomeFeedModuleList&parentSpanId=keA542jLSHg%3D",
+    "area": "Jobs",
+    "response_len": 863272,
+    "postData": "{\"pagerId\":\"com.linkedin.sdui.pagers.jobseeker.jobsHomeFeedModuleList\",\"clientArguments\":{\"$type\":\"proto.sdui.actions.requests.RequestedArguments\",\"payload\":{\"start\":2,\"count\":3,\"paginationToken\":\"/Sp"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.generated.profile.dsl.impl.profileCardsActivity",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/component?componentId=com.linkedin.sdui.generated.profile.dsl.impl.profileCardsActivity&sduiid=com.linkedin.sdui.generated.profile.dsl.impl.pro",
+    "area": "Misc",
+    "response_len": 9271624,
+    "postData": "{\"clientArguments\":{\"payload\":{\"isSelfView\":false,\"vanityName\":\"alex-rivera\"},\"states\":[],\"requestMetadata\":{\"$type\":\"proto.sdui.common.RequestMetadata\"},\"screenId\":\"com.linkedin.sdui.flagshipnav."
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.profile.profilePolicyNotice",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.profile.profilePolicyNotice&parentSpanId=NHBsGSa8fik%3D",
+    "area": "Misc",
+    "response_len": 10264,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.profile.profilePolicyNotice\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.profile.profilePolicyNotice\",\"requestedArguments\":{\"$type\":\"proto.sdui.ac"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.profile.fetchProfileDiscoveryDrawer",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.profile.fetchProfileDiscoveryDrawer&parentSpanId=wYlmjGYgihM%3D",
+    "area": "Misc",
+    "response_len": 576,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.profile.fetchProfileDiscoveryDrawer\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.profile.fetchProfileDiscoveryDrawer\",\"requestedArguments\":{\"$type"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.generated.profile.dsl.impl.profileCardsAboveActivity",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/component?componentId=com.linkedin.sdui.generated.profile.dsl.impl.profileCardsAboveActivity&sduiid=com.linkedin.sdui.generated.profile.dsl.imp",
+    "area": "Misc",
+    "response_len": 73680,
+    "postData": "{\"clientArguments\":{\"payload\":{\"isSelfView\":false,\"vanityName\":\"alex-rivera\",\"replaceableSectionArgs\":{\"vanityName\":\"alex-rivera\",\"hideCardsForGoldenGate\":false,\"shouldSetupReplaceableComponen"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.generated.profile.dsl.impl.browsemapRecommendedEntitySection",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/component?componentId=com.linkedin.sdui.generated.profile.dsl.impl.browsemapRecommendedEntitySection&sduiid=com.linkedin.sdui.generated.profile",
+    "area": "Misc",
+    "response_len": 191676,
+    "postData": "{\"clientArguments\":{\"payload\":{\"vanityName\":\"alex-rivera\",\"isDetailView\":false,\"hideProfileCards\":false},\"states\":[],\"requestMetadata\":{\"$type\":\"proto.sdui.common.RequestMetadata\"},\"screenId\":\"com"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.generated.profile.dsl.impl.pymkRecommendedEntitySection",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/component?componentId=com.linkedin.sdui.generated.profile.dsl.impl.pymkRecommendedEntitySection&sduiid=com.linkedin.sdui.generated.profile.dsl.",
+    "area": "Misc",
+    "response_len": 194012,
+    "postData": "{\"clientArguments\":{\"payload\":{\"vanityName\":\"alex-rivera\",\"isDetailView\":false,\"hideProfileCards\":false},\"states\":[],\"requestMetadata\":{\"$type\":\"proto.sdui.common.RequestMetadata\"},\"screenId\":\"com"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.generated.profile.dsl.impl.productRecommendedEntitySection",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/component?componentId=com.linkedin.sdui.generated.profile.dsl.impl.productRecommendedEntitySection&sduiid=com.linkedin.sdui.generated.profile.d",
+    "area": "Misc",
+    "response_len": 66364,
+    "postData": "{\"clientArguments\":{\"payload\":{\"vanityName\":\"alex-rivera\"},\"states\":[],\"requestMetadata\":{\"$type\":\"proto.sdui.common.RequestMetadata\"},\"screenId\":\"com.linkedin.sdui.flagshipnav.profile.Profile\"}}"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "WvmpAnalytics",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=WvmpAnalytics&parentSpanId=uFu86i6HXu4%3D",
+    "area": "Analytics",
+    "response_len": 71924,
+    "postData": "{\"requestId\":\"WvmpAnalytics\",\"serverRequest\":{\"requestId\":\"WvmpAnalytics\",\"requestedArguments\":{\"$type\":\"proto.sdui.actions.requests.RequestedArguments\",\"payload\":{\"filterTypeList\":[],\"highlightCardDi"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "WvmpEntityList",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=WvmpEntityList&parentSpanId=XKLv%2FFcl0E8%3D",
+    "area": "Misc",
+    "response_len": 0,
+    "postData": "{\"requestId\":\"WvmpEntityList\",\"serverRequest\":{\"requestId\":\"WvmpEntityList\",\"requestedArguments\":{\"$type\":\"proto.sdui.actions.requests.RequestedArguments\",\"payload\":{\"sortType\":\"ProfileViewSortType_TI"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.creatoranalytics.caSlowMetrics",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.creatoranalytics.caSlowMetrics&parentSpanId=ew3mhzJWlso%3D",
+    "area": "Analytics",
+    "response_len": 129952,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.creatoranalytics.caSlowMetrics\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.creatoranalytics.caSlowMetrics\",\"requestedArguments\":{\"$type\":\"proto.s"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.search.requests.updateSearchHistoryRequest",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.search.requests.updateSearchHistoryRequest&parentSpanId=CXaCgBNdQMQ%3D",
+    "area": "Search",
+    "response_len": 1284,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.search.requests.updateSearchHistoryRequest\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.search.requests.updateSearchHistoryRequest\",\"requestedArguments\":{\"$type\":\"p"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.search.requests.searchHomeRequestAction",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.search.requests.searchHomeRequestAction&parentSpanId=pj9lxVMSmHs%3D",
+    "area": "Search",
+    "response_len": 0,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.search.requests.searchHomeRequestAction\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.search.requests.searchHomeRequestAction\",\"requestedArguments\":{\"$type\":\"proto.s"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.infra.register.cooloff.activity",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.infra.register.cooloff.activity&parentSpanId=OQOrw%2F0d3wM%3D",
+    "area": "Misc",
+    "response_len": 72,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.infra.register.cooloff.activity\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.infra.register.cooloff.activity\",\"requestedArguments\":{\"$type\":\"proto.sdui.actions.requ"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.mynetwork.addaMarkAllNetworkHighlightsAsSeen",
+    "url_sample": "https://www.linkedin.com/flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.requests.mynetwork.addaMarkAllNetworkHighlightsAsSeen&parentSpanId=KhSE7jQXLuA%3D",
+    "area": "Network",
+    "response_len": 0,
+    "postData": "{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.addaMarkAllNetworkHighlightsAsSeen\",\"serverRequest\":{\"requestId\":\"com.linkedin.sdui.requests.mynetwork.addaMarkAllNetworkHighlightsAsSeen\",\"requested"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.reactions.delete",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Unlike — verified"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.update.deletePost",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Delete post — verified"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.comments.createComment",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Create comment — verified"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.comments.deleteComment",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Delete comment — verified"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.requests.profile.saveProfileIntroForm",
+    "url_sample": "",
+    "area": "Identity/Profile",
+    "response_len": null,
+    "postData": null,
+    "verified": "Profile save — schema verified"
+  },
+  {
+    "method": "POST",
+    "layer": "SDUI",
+    "type": "SDUI",
+    "family": "com.linkedin.sdui.action.sharing.closed-sharebox.server-action",
+    "url_sample": "",
+    "area": "Feed/Posts",
+    "response_len": null,
+    "postData": null,
+    "verified": "Post-create follow-up (returns post URN)"
+  }
+]

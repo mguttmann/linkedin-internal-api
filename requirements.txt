@@ -1,0 +1,7 @@
+# Runtime dependencies for the LinkedIn internal-API client + MCP server.
+# Install with:  pip install -r requirements.txt   (or: uv pip install -r requirements.txt)
+
+fastmcp>=2.0        # MCP server framework (@mcp.tool)
+patchright>=1.40    # stealth Playwright fork — persistent Chrome context
+requests>=2.31      # browserless Voyager/SDUI calls (vgreq)
+websocket-client>=1.7  # CDP websocket for the capture session
