@@ -317,9 +317,35 @@ class LinkedInClient:
         activity_id = activity_urn.split(":")[-1] if ":" in activity_urn else activity_urn
         return f"urn:li:comment:(activity:{activity_id},{comment_id})"
 
+    def _comment_author_id(self, comment_id: str, activity_urn: str) -> Optional[str]:
+        """Return the author's profile-id (ACoAA…) for a comment on a post, or None if the
+        comment can't be found. Used by delete_comment's safety guard to refuse deleting
+        OTHER people's comments. Reads get_post_comments and matches on the comment's `urn`.
+        """
+        cid = str(comment_id)
+        try:
+            data = self.get_post_comments(activity_urn)
+        except Exception:
+            return None
+        for x in data.get("included", []):
+            if "Comment" not in x.get("$type", ""):
+                continue
+            urn = x.get("urn", "")
+            # urn:li:comment:(activity:<post>,<commentId>) — match the trailing comment id
+            if urn.rstrip(")").rsplit(",", 1)[-1] == cid:
+                return x.get("commenterProfileId")
+        return None
+
     def delete_comment(self, comment_id: str, activity_urn: str,
-                       dry_run: bool = False, comment_text: str = "") -> dict:
-        """Delete a comment — two-stage, robust.
+                       dry_run: bool = False, comment_text: str = "",
+                       force: bool = False) -> dict:
+        """Delete a comment — two-stage, robust, with an OWNER-ONLY safety guard.
+
+        SAFETY GUARD (default): only deletes comments whose author is the owner
+        (LI_OWNER_URN). Deleting someone ELSE's comment requires force=True. This exists
+        because a test once deleted a real person's comment on the owner's post — the guard
+        makes that impossible by accident. The guard reads the comment's author first; if the
+        comment can't be found (already gone / unreadable), the delete proceeds (idempotent).
 
         PRIMARY (browserless): classic Voyager REST DELETE, verified live (204):
             DELETE /voyager/api/feed/comments/<url-enc urn:li:comment:(activity:<postId>,<commentId>)>
@@ -335,7 +361,19 @@ class LinkedInClient:
         activity_urn: urn:li:activity:<postId> the comment lives on (a bare id also works).
         dry_run: build the DELETE request and return it WITHOUT sending (for inspection/tests).
         comment_text: visible text of the comment — enables the browser fallback.
+        force: bypass the owner-only guard to delete another person's comment (opt-in).
         """
+        # --- owner-only safety guard (unless forced or just building a dry_run) ---
+        if not force and not dry_run:
+            owner_id = ME.rsplit(":", 1)[-1]  # ACoAA… part of LI_OWNER_URN
+            author_id = self._comment_author_id(comment_id, activity_urn)
+            if author_id is not None and author_id != owner_id:
+                return {"ok": False, "status": "blocked", "comment_id": str(comment_id),
+                        "author_id": author_id, "owner_id": owner_id,
+                        "via": "guard",
+                        "note": ("refused: this comment is NOT the owner's (author "
+                                 f"{author_id} != owner {owner_id}). Pass force=True to "
+                                 "delete someone else's comment on purpose.")}
         comment_urn = self._comment_delete_urn(comment_id, activity_urn)
         url = f"{BASE}/feed/comments/{urllib.parse.quote(comment_urn, safe='')}"
         if dry_run:

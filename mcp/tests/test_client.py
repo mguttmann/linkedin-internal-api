@@ -240,6 +240,70 @@ def test_delete_comment_accepts_bare_activity_id():
     assert res["comment_urn"] == "urn:li:comment:(activity:111,222)"
 
 
+def _client_comments(comments, delete_code=204):
+    """Client whose get_post_comments returns the given comment objects (for the delete guard).
+    comments: list of {id, author} → shaped into the included[] form the guard reads."""
+    calls = {"delete": [], "post": []}
+    included = [{"$type": "com.linkedin.voyager.feed.Comment",
+                 "urn": f"urn:li:comment:(activity:999,{c['id']})",
+                 "commenterProfileId": c["author"]} for c in comments]
+
+    class R:
+        def __init__(self, code=200, payload=None):
+            self.status_code, self._p = code, payload or {}
+        def json(self):
+            return self._p
+
+    fake = types.ModuleType("vgreq")
+    fake.get = lambda *a, **k: R(200, {"included": included})
+    fake.delete = lambda url, *a, **k: (calls["delete"].append(url) or R(delete_code))
+    fake.post = lambda *a, **k: R(delete_code)
+    sys.modules["vgreq"] = fake
+    import importlib
+    import lib.client as cl
+    importlib.reload(cl)
+    return cl.LinkedInClient(), calls, cl
+
+
+def test_delete_comment_guard_blocks_other_peoples_comments(monkeypatch):
+    # SAFETY: deleting a comment authored by someone OTHER than the owner must be refused
+    # (no HTTP DELETE issued) unless force=True. Regression guard for a real incident.
+    monkeypatch.setenv("LI_OWNER_URN", "urn:li:fsd_profile:OWNER123")
+    li, calls, _ = _client_comments([{"id": "555", "author": "STRANGER999"}])
+    res = li.delete_comment("555", "urn:li:activity:999")
+    assert res["ok"] is False and res["status"] == "blocked" and res["via"] == "guard"
+    assert calls["delete"] == [], "guard must NOT issue a DELETE for a stranger's comment"
+    assert "force=True" in res["note"]
+
+
+def test_delete_comment_guard_allows_own_comment(monkeypatch):
+    # the owner's own comment deletes normally (guard must not over-block).
+    monkeypatch.setenv("LI_OWNER_URN", "urn:li:fsd_profile:OWNER123")
+    li, calls, _ = _client_comments([{"id": "555", "author": "OWNER123"}])
+    res = li.delete_comment("555", "urn:li:activity:999")
+    assert res["ok"] is True and res["status"] == 204 and res["via"] == "voyager-rest"
+    assert len(calls["delete"]) == 1
+
+
+def test_delete_comment_force_bypasses_guard(monkeypatch):
+    # force=True deletes a stranger's comment on purpose (opt-in).
+    monkeypatch.setenv("LI_OWNER_URN", "urn:li:fsd_profile:OWNER123")
+    li, calls, _ = _client_comments([{"id": "555", "author": "STRANGER999"}])
+    res = li.delete_comment("555", "urn:li:activity:999", force=True)
+    assert res["ok"] is True and res["via"] == "voyager-rest"
+    assert len(calls["delete"]) == 1
+
+
+def test_delete_comment_guard_proceeds_when_author_unknown(monkeypatch):
+    # if the comment can't be read (already gone / empty), the delete proceeds (idempotent) —
+    # the guard only blocks when it can positively identify a DIFFERENT author.
+    monkeypatch.setenv("LI_OWNER_URN", "urn:li:fsd_profile:OWNER123")
+    li, calls, _ = _client_comments([])  # no comments returned → author unknown
+    res = li.delete_comment("555", "urn:li:activity:999")
+    assert res["ok"] is True and res["via"] == "voyager-rest"
+    assert len(calls["delete"]) == 1
+
+
 def test_create_comment_browserless_dry_run_builds_sdui_body():
     # BROWSERLESS comment create via the VERIFIED SDUI createComment route. dry_run must
     # build the request WITHOUT sending, target the flagship-web SDUI endpoint, and carry

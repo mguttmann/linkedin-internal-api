@@ -87,9 +87,14 @@ def create_comment(activity_urn: str, text: str, confirm: bool = False) -> dict:
 
 @mcp.tool
 def delete_comment(comment_id: str, activity_urn: str, confirm: bool = False,
-                   comment_text: str = "", dry_run: bool = False) -> dict:
+                   comment_text: str = "", dry_run: bool = False,
+                   force: bool = False) -> dict:
     """Delete a comment. comment_id = the numeric comment id; activity_urn = the post it's on
     (urn:li:activity:<id>). Destructive → requires confirm=True.
+
+    SAFETY GUARD: by default only the OWNER's own comments can be deleted. Deleting someone
+    else's comment (e.g. a reply on your post) is refused unless force=True — this prevents
+    accidentally removing a real person's comment during testing.
 
     Primary path is the browserless Voyager REST DELETE (verified 204). If it fails and
     comment_text (the comment's visible text) is supplied, falls back to the browser UI, which
@@ -99,7 +104,7 @@ def delete_comment(comment_id: str, activity_urn: str, confirm: bool = False,
     if not confirm:
         return {"needs_confirmation": True, "comment_id": comment_id, "activity_urn": activity_urn}
     li.ensure_session()
-    return li.delete_comment(comment_id, activity_urn, comment_text=comment_text)
+    return li.delete_comment(comment_id, activity_urn, comment_text=comment_text, force=force)
 
 
 @mcp.tool
