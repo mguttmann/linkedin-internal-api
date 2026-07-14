@@ -49,23 +49,50 @@ def test_like_hits_voyager_reactions_with_like_body():
     assert res["ok"] is True and res["status"] == 201
 
 
-def test_unlike_uses_sdui_with_literal_activity_id():
-    li, calls = _client(200)
-    res = li.unlike(_URN)
-    url, body = calls["post"][-1]
-    assert "sduiid=com.linkedin.sdui.reactions.delete" in url
-    payload = body["serverRequest"]["requestedArguments"]["payload"]
-    aid = payload["threadUrn"]["threadUrnActivityThreadUrn"]["activityUrn"]["activityId"]
-    assert aid == _AID, "activityId must be a real literal, not a state-ref"
-    assert payload["reactionType"] == "ReactionType_LIKE"
-    assert res["ok"] is True and "note" not in res
+def test_unlike_posts_sdui_template_browserless(monkeypatch):
+    # unlike replays the captured SDUI template (full body) with minimal headers via requests.post —
+    # NOT vgreq. Assert: right SDUI url, activity id substituted into the template, minimal headers.
+    import lib.client as cl
+    sent = {}
+
+    class _R:
+        status_code = 200
+        text = ""
+        headers = {}
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        sent["url"] = url
+        sent["body"] = data.decode() if isinstance(data, (bytes, bytearray)) else data
+        sent["headers"] = headers or {}
+        return _R()
+
+    monkeypatch.setattr(cl.requests, "post", fake_post)
+    monkeypatch.setattr(cl.LinkedInClient, "_sdui_min_headers",
+                        staticmethod(lambda: {"csrf-token": "ajax:x", "Cookie": "k=v",
+                                              "Content-Type": "application/json"}))
+    res = cl.LinkedInClient().unlike(_URN)
+    assert "sduiid=com.linkedin.sdui.reactions.delete" in sent["url"]
+    assert _AID in sent["body"], "activity id must be substituted into the template body"
+    assert "{{ACTIVITY_ID}}" not in sent["body"], "placeholder must be filled"
+    assert "csrf-token" in sent["headers"] and "accept" not in sent["headers"], \
+        "must use minimal SDUI headers (no voyager accept header)"
+    assert res["ok"] is True and res["via"] == "sdui-browserless" and "note" not in res
 
 
-def test_unlike_is_honest_on_500():
-    li, _ = _client(500)
-    res = li.unlike(_URN)
+def test_unlike_is_honest_on_error(monkeypatch):
+    import lib.client as cl
+
+    class _R:
+        status_code = 500
+        text = ""
+        headers = {}
+
+    monkeypatch.setattr(cl.requests, "post", lambda *a, **k: _R())
+    monkeypatch.setattr(cl.LinkedInClient, "_sdui_min_headers",
+                        staticmethod(lambda: {"csrf-token": "ajax:x", "Cookie": "k=v"}))
+    res = cl.LinkedInClient().unlike(_URN)
     assert res["ok"] is False and res["status"] == 500
-    assert "currentActor" in res.get("note", ""), "must explain the browserless limitation"
+    assert "template may have rotated" in res.get("note", ""), "must explain the fallback"
 
 
 def test_get_my_posts_uses_exact_captured_url_shape():

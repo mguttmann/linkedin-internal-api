@@ -11,24 +11,25 @@
 ## Current state (live)
 
 **130 distinct endpoints** (141 raw captures) mapped. The write surface is now broad and, for the everyday actions,
-**verified live**. Shipped as an **MCP server (26 tools)** — see `../mcp/`. Reads and most
-writes run **browserless** through pure `requests` (vgreq); a handful of SDUI writes that need
-the browser's `currentActor` binding fall back to the stealth browser.
+**verified live**. Shipped as an **MCP server** — see `../mcp/`. Reads and writes run **browserless**
+through pure `requests`; comment/reaction SDUI writes replay a captured full body with minimal headers.
 
-**MCP tools (26):**
+**MCP tools:**
 - *Reads (browserless):* `get_me`, `get_my_posts`, `get_profile`, `get_notifications`,
   `get_conversations`, `get_connections_summary`, `get_post_comments`, `get_link_preview`
 - *Posts:* `create_post` (+poll_urn), `edit_post`, `delete_post`, `create_poll`, `save_post`,
-  `repost`, `delete_repost` (repost is browser-only headless; rest browserless live)
-- *Engagement:* `like` (browserless 201), `unlike` (browser-only)
+  `repost`, `delete_repost` (repost create browserless 200; repost delete via browser)
+- *Engagement:* `like` (browserless 201), `unlike` (browserless 200), `create_comment`,
+  `delete_comment` (all browserless)
 - *Messaging (browserless live):* `send_dm`, `recall_message`, `react_to_message`
 - *Network:* `follow_company`, `connect`, `endorse_skill` (browserless 200), `remove_connection`
 - *Session:* `session_status`, `refresh_session`
 
-**Key finding:** SDUI writes come in two flavors — those whose payload carries real literals
-(save_post, like) replay browserless; those needing `currentActor` context (unlike, repost)
-return 500 headless and use the browser path. Voyager writes (send_dm, follow, recall) are
-all browserless once the exact body is captured (e.g. send_dm's raw-bytes `trackingId`).
+**Key finding:** SDUI writes are ALL browserless-replayable — the earlier `currentActor` "needs a
+browser" story was a red herring (that field is empty in the real browser request too). Two things
+mattered: (1) replay the **full captured body** verbatim (hand-built partial bodies 500), and
+(2) send **minimal headers** (csrf + cookies + content-type) — vgreq's Voyager `accept`/`x-restli`
+headers make the SDUI route 500. Proven live for `unlike` and `create_comment`.
 
 ---
 

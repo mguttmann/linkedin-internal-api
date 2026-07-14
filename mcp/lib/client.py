@@ -20,6 +20,8 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+import requests
+
 # Reuse the proven pure-requests client from the internal-api repo (sibling ../lib).
 _REPO_LIB = os.path.join(os.path.dirname(__file__), "..", "..", "lib")
 sys.path.insert(0, os.path.abspath(_REPO_LIB))
@@ -385,39 +387,51 @@ class LinkedInClient:
         return {"status": r.status_code, "ok": r.status_code in (200, 201),
                 "activity_urn": activity_urn}
 
+    @staticmethod
+    def _sdui_min_headers() -> dict:
+        """Minimal headers the flagship-web SDUI route accepts: csrf + cookies + content-type.
+        vgreq's Voyager headers (accept: …normalized+json, x-restli-protocol-version) make the
+        SDUI endpoint 500 — the SDUI route wants the plain web-client shape, not the REST one.
+        """
+        import json as _json
+        cookie_file = os.environ.get("VG_COOKIES", "/tmp/li_cookies.json")
+        li = _json.load(open(cookie_file))
+        cookies = {c["name"]: c["value"] for c in li} if isinstance(li, list) else li
+        csrf = cookies.get("JSESSIONID", "").strip('"')
+        return {"Content-Type": "application/json", "csrf-token": csrf,
+                "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items())}
+
+    def _post_sdui_template(self, tpl_name: str, activity_id: str, sduiid: str):
+        """POST a captured SDUI request body (templates/<tpl_name>) with {{ACTIVITY_ID}} filled,
+        using minimal SDUI headers. Returns the raw requests.Response.
+        Reverse-engineered pattern: SDUI writes replay verbatim from the captured full body
+        (partial hand-built bodies 500); only the activity id differs per call.
+        """
+        tpl_path = os.path.join(os.path.dirname(__file__), "templates", tpl_name)
+        with open(tpl_path, "r", encoding="utf-8") as fh:
+            body = fh.read().replace("{{ACTIVITY_ID}}", activity_id)
+        url = ("https://www.linkedin.com/flagship-web/rsc-action/actions/server-request"
+               f"?sduiid={sduiid}")
+        return requests.post(url, data=body.encode("utf-8"),
+                             headers=self._sdui_min_headers(), timeout=25)
+
     def unlike(self, activity_urn: str) -> dict:
-        """Remove a LIKE reaction. VERIFIED path = SDUI (Voyager DELETE returns 400).
-        POST /flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.reactions.delete
-        Body carries the activityId + reactionType as real literals → browserless-replayable.
+        """Remove a LIKE reaction — BROWSERLESS (VERIFIED 2026-07-14, live 200, reaction gone).
+
+        The old code 500'd not because of a missing currentActor binding (that field is empty
+        in the real browser request too) but because it (a) sent a hand-built partial body and
+        (b) used vgreq's Voyager headers. Fix: replay the captured full SDUI body from a template
+        with minimal headers (csrf + cookies + content-type).
         """
         activity_id = activity_urn.rsplit(":", 1)[-1]
-        url = ("https://www.linkedin.com/flagship-web/rsc-action/actions/server-request"
-               "?sduiid=com.linkedin.sdui.reactions.delete")
-        body = {
-            "requestId": "com.linkedin.sdui.reactions.delete",
-            "serverRequest": {
-                "requestId": "com.linkedin.sdui.reactions.delete",
-                "requestedArguments": {
-                    "$type": "proto.sdui.actions.requests.RequestedArguments",
-                    "payload": {
-                        "threadUrn": {"threadUrnActivityThreadUrn": {
-                            "__typename": "proto_com_linkedin_common_ActivityUrn",
-                            "activityUrn": {"activityId": activity_id}}},
-                        "reactionType": "ReactionType_LIKE",
-                        "reactionSource": "Update",
-                    },
-                    "requestedStateKeys": [],
-                },
-            },
-        }
-        r = self._vg().post(url, body)
+        r = self._post_sdui_template("unlike_sdui.json.tpl", activity_id,
+                                     "com.linkedin.sdui.reactions.delete")
         ok = r.status_code in (200, 201, 204)
-        out = {"status": r.status_code, "ok": ok,
+        out = {"status": r.status_code, "ok": ok, "via": "sdui-browserless",
                "activity_urn": activity_urn, "endpoint": "sdui.reactions.delete"}
         if not ok:
-            # Known limitation: pure-requests replay returns 500 (needs currentActor binding).
-            out["note"] = ("browserless unlike not yet supported (server needs currentActor "
-                           "metadata) — use the browser path for reliable unlike")
+            out["note"] = ("sdui unlike returned non-2xx — template may have rotated "
+                           "(re-capture); the browser path remains as fallback")
         return out
 
     def create_post(self, text: str, visibility: str = "PUBLIC", poll_urn: str = "") -> dict:

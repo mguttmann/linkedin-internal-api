@@ -42,7 +42,7 @@ verified live. See `04-WRITE-OPERATIONS.md` for full request/body schemas.
 | Operation | World | Endpoint | Status |
 |---|---|---|---|
 | **Set like / reaction** | Voyager | `voyagerSocialDashReactions` POST | ✅ 201 (browserless) |
-| **Unlike / remove reaction** | SDUI | `com.linkedin.sdui.reactions.delete` | ✅ verified (browser — needs currentActor) |
+| **Unlike / remove reaction** | SDUI | `com.linkedin.sdui.reactions.delete` | ✅ verified (browserless — captured-body template + minimal headers) |
 | **Create post** | Voyager | `graphql voyagerContentcreationDashShares` | ✅ verified (browserless) |
 | **Edit post** | Voyager | `graphql voyagerContentcreationDashShares` + `resourceKey`/`updateUrn` | ✅ verified (browserless, docs/24) |
 | **Delete post** | SDUI | `com.linkedin.sdui.update.deletePost` | ✅ verified |
