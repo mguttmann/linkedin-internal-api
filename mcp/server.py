@@ -75,6 +75,34 @@ def get_post_comments(activity_urn: str) -> dict:
 
 
 @mcp.tool
+def create_comment(activity_urn: str, text: str, confirm: bool = False) -> dict:
+    """Post a top-level comment on a post (activity_urn = urn:li:activity:<id>, or a bare id).
+    People-facing → requires confirm=True. Returns status + the new comment URN when resolvable.
+    Note: SDUI action; if it 500s it needs the browser currentActor binding (see docs/07)."""
+    if not confirm:
+        return {"needs_confirmation": True, "activity_urn": activity_urn, "preview": text}
+    li.ensure_session()
+    return li.create_comment(activity_urn, text)
+
+
+@mcp.tool
+def delete_comment(comment_id: str, activity_urn: str, confirm: bool = False,
+                   comment_text: str = "", dry_run: bool = False) -> dict:
+    """Delete a comment. comment_id = the numeric comment id; activity_urn = the post it's on
+    (urn:li:activity:<id>). Destructive → requires confirm=True.
+
+    Primary path is the browserless Voyager REST DELETE (verified 204). If it fails and
+    comment_text (the comment's visible text) is supplied, falls back to the browser UI, which
+    locates the comment by that text. dry_run=True builds+returns the request without sending."""
+    if dry_run:
+        return li.delete_comment(comment_id, activity_urn, dry_run=True, comment_text=comment_text)
+    if not confirm:
+        return {"needs_confirmation": True, "comment_id": comment_id, "activity_urn": activity_urn}
+    li.ensure_session()
+    return li.delete_comment(comment_id, activity_urn, comment_text=comment_text)
+
+
+@mcp.tool
 def get_link_preview(url: str) -> dict:
     """Fetch LinkedIn's rich link-preview metadata (title/image/desc) for a URL, as the composer
     shows it when you paste a link. Browserless read."""

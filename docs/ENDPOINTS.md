@@ -30,7 +30,7 @@ the patchright session (SDUI currentActor binding).
 | Read own posts (full text) | Voyager GQL | `voyagerFeedDashProfileUpdates.<hash>` | ✅ 200 | 02 |
 | Read post comments | Voyager | `GET feed/comments?q=comments&updateId={urn}` | ✅ 200 | 04 |
 | Create comment | SDUI | `com.linkedin.sdui.comments.createComment` | ⚠️ (browser) | 04 |
-| Delete comment | SDUI | `com.linkedin.sdui.comments.deleteComment` | ⚠️ (browser) | 04 |
+| Delete comment | Voyager | `DELETE feed/comments/{url-enc urn:li:comment:(activity:<post>,<id>)}` | ✅ 204 (browserless) | 07 |
 | React to comment | SDUI | `com.linkedin.sdui.reactions.create` (commentThreadUrn) | ⚠️ (browser) | 25 |
 | Repost / instant repost | SDUI | `com.linkedin.sdui.feed.requests.createInstantRepost` | ⚠️ 500 (browser) | 10 |
 | Delete repost | Voyager GQL | `voyagerFeedDashReposts` (delete-by-key) | ✅ | 10 |

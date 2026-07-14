@@ -158,6 +158,209 @@ class LinkedInClient:
         url = f"{BASE}/feed/comments?q=comments&updateId={enc}"
         return self._vg().get(url).json()
 
+    # --- comment creation: SDUI createComment, browserless (VERIFIED 2026-07-14) ------
+    # The web SDUI createComment request IS replayable with pure requests. The earlier
+    # "needs a browser" claim was WRONG: the comment text is NOT only a MemoryNamespace
+    # *ref* — the same request also carries the text as a real literal under
+    # requestedStateValues (…"value":{"text":"<TEXT>"}…). And the state-key token
+    # (commentBoxText-<TOKEN>) is NOT render-bound: it is a self-mintable protobuf of
+    # {timestamp varint + 16 random bytes} — exactly like the send_dm trackingId.
+    # Proven live: verbatim replay → 200 + comment appeared; freshly-minted token + new
+    # text → 200 + comment appeared. So we template the captured body and swap 5 fields.
+    _SDUI_COMMENT_URL = ("https://www.linkedin.com/flagship-web/rsc-action/actions/"
+                         "server-request?sduiid=com.linkedin.sdui.comments.createComment")
+
+    @staticmethod
+    def _mint_comment_token() -> str:
+        """Mint a commentBoxText state-key token: protobuf {field1:{field1:now_ms}, field2:16 rand}.
+        Reverse-engineered from two live captures (both decoded to a ts varint + a 16-byte id).
+        base64url without padding, matching the wire form LinkedIn emits.
+        """
+        import base64 as _b64, secrets as _sec, time as _t
+
+        def _varint(n: int) -> bytes:
+            out = b""
+            while True:
+                b = n & 0x7F
+                n >>= 7
+                out += bytes([b | (0x80 if n else 0)])
+                if not n:
+                    return out
+        now_ms = int(_t.time() * 1000)
+        inner = b"\x08" + _varint(now_ms)                 # field1 (varint) = timestamp
+        ts_field = b"\x0a" + bytes([len(inner)]) + inner   # field1 (len-delim) = inner msg
+        tok = ts_field + b"\x12\x10" + _sec.token_bytes(16)  # field2 (len-delim, 16) = trackingId
+        return _b64.urlsafe_b64encode(tok).decode().rstrip("=")
+
+    def create_comment_browserless(self, activity_urn: str, text: str,
+                                   dry_run: bool = False,
+                                   body_form: str = "sdui") -> dict:
+        """Post a top-level comment via the SDUI createComment route — NO browser.
+
+        VERIFIED browserless 2026-07-14 (see the note above). Loads the captured request
+        body template (lib/templates/create_comment_sdui.json.tpl) and substitutes 5 fields:
+        ACTIVITY_ID, TEXT (json-escaped), a freshly-minted TOKEN, a random TRACKING_ID and
+        OPTIMISTIC_KEY. Posts the raw string with vgreq (csrf + cookies auto-applied).
+
+        The read model returns each comment as `com.linkedin.voyager.feed.Comment` with the
+        text under `commentV2.text`. The SDUI createComment write carries the text as a real
+        literal too (verified live browserless), so no browser is needed.
+
+        Args:
+            activity_urn: urn:li:activity:<id> (or a bare numeric id).
+            text: the comment text (a plain literal — json-escaped into the body).
+            dry_run: if True, BUILD and return {url, body_sent, ...} WITHOUT sending, so the
+                     caller can inspect the exact request before any live write.
+            body_form: 'sdui' (the verified createComment route). Kept for signature stability.
+
+        Returns: {status, ok, comment_urn?, via:'sdui-browserless', url, body_sent[, note]}.
+        """
+        import json as _json
+        import os as _os
+        import re as _re
+        import uuid as _uuid
+
+        activity_id = activity_urn.rsplit(":", 1)[-1] if ":" in activity_urn else activity_urn
+        url = self._SDUI_COMMENT_URL
+
+        # Load the captured request-body template (5 placeholders) and fill it.
+        tpl_path = _os.path.join(_os.path.dirname(__file__),
+                                 "templates", "create_comment_sdui.json.tpl")
+        with open(tpl_path, "r", encoding="utf-8") as fh:
+            tpl = fh.read()
+        token = self._mint_comment_token()
+        # 16-byte base64 trackingId (LinkedIn wire form, e.g. "ZRBhCzd8QiyaxRVu4Oh4iw==")
+        import base64 as _b64
+        import secrets as _sec
+        tracking_id = _b64.b64encode(_sec.token_bytes(16)).decode()
+        optimistic_key = "auto-component-" + str(_uuid.uuid4())
+        # json.dumps then strip the surrounding quotes → a properly escaped JSON string body-safe.
+        text_escaped = _json.dumps(text)[1:-1]
+        body = (tpl.replace("{{TOKEN}}", token)
+                   .replace("{{ACTIVITY_ID}}", activity_id)
+                   .replace("{{TRACKING_ID}}", tracking_id)
+                   .replace("{{OPTIMISTIC_KEY}}", optimistic_key)
+                   .replace("{{TEXT}}", text_escaped))
+
+        if dry_run:
+            return {"status": "dry_run", "ok": None, "via": "sdui-browserless",
+                    "url": url, "body_sent": body,
+                    "note": "dry_run — request built but NOT sent; inspect body_sent then "
+                            "re-run with dry_run=False to post live"}
+        # raw string body (already JSON) — is_json=False so vgreq doesn't re-encode it
+        r = self._vg().post(url, body, is_json=False)
+        ok = r.status_code in (200, 201)
+        out = {"status": r.status_code, "ok": ok, "via": "sdui-browserless",
+               "url": url, "activity_id": activity_id}
+        # the created comment URN comes back in the response body
+        try:
+            m = (_re.search(r"urn:li:comment:\([^)]*\)", r.text) or
+                 _re.search(r"urn:li:fsd_comment:\([^)]*\)", r.text) or
+                 _re.search(r"urn:li:fs_objectComment:\([^)]*\)", r.text))
+            if m:
+                out["comment_urn"] = m.group(0)
+        except Exception:
+            pass
+        if not ok:
+            out["note"] = ("sdui createComment returned non-2xx — token/template may have "
+                           "rotated (re-capture with tools/capture); create_comment() falls "
+                           "back to the browser")
+        return out
+
+    def create_comment(self, activity_urn: str, text: str) -> dict:
+        """Post a top-level comment. Tries the BROWSERLESS Voyager-REST route first, then falls
+        back to driving the real UI (browser) only if that fails.
+
+        Primary path (no Chrome): create_comment_browserless() → classic Voyager `feed/comments`
+        collection with the text as a real literal in the body (`commentV2.text`).
+
+        Fallback: the web SDUI createComment action binds the text to a server-side state key
+        (commentBoxText-<...>, MemoryNamespace) that only exists after the comment box has
+        rendered — the text is never in the SDUI request body (confirmed by live capture
+        2026-07-14, api-docs/_writes/comment_create.json). So the fallback opens the post in the
+        logged-in browser, types into the editor, and clicks submit. activity_urn: urn:li:activity:<id>.
+        """
+        activity_id = activity_urn.rsplit(":", 1)[-1] if ":" in activity_urn else activity_urn
+        # 1) browserless first — the whole point of this method
+        try:
+            rest = self.create_comment_browserless(f"urn:li:activity:{activity_id}", text)
+        except Exception as exc:  # vgreq/session problem — degrade to browser
+            rest = {"ok": False, "status": None, "via": "voyager-rest",
+                    "note": f"voyager-rest raised: {exc}"}
+        if rest.get("ok"):
+            rest["activity_id"] = activity_id
+            return rest
+        # 2) browser fallback (SDUI needs the rendered comment box + currentActor binding)
+        self._browser = self._browser or SessionBrowser()
+        self._browser.start()
+        if not self._browser.is_logged_in():
+            raise NotLoggedInError("LinkedIn session expired — log in in the browser window")
+        res = self._browser.post_comment_ui(f"urn:li:activity:{activity_id}", text)
+        return {"status": res.get("status"), "ok": res.get("ok", False),
+                "activity_id": activity_id, "via": "browser-fallback",
+                "browserless_attempt": {"status": rest.get("status"),
+                                        "body_sent": rest.get("body_sent")},
+                "note": res.get("note", "")}
+
+    @staticmethod
+    def _comment_delete_urn(comment_id: str, activity_urn: str) -> str:
+        """Build the comment URN the classic Voyager DELETE route wants.
+
+        The feed/comments DELETE endpoint is keyed by the comment's *canonical* urn form
+        (the `urn` field in the feed/comments read, NOT entityUrn/dashEntityUrn):
+            urn:li:comment:(activity:<postId>,<commentId>)
+        Note the order — activity FIRST, then the comment id. The other two forms
+        (fs_objectComment: id-first / fsd_comment: dash) are rejected by this route (400/500).
+        """
+        activity_id = activity_urn.split(":")[-1] if ":" in activity_urn else activity_urn
+        return f"urn:li:comment:(activity:{activity_id},{comment_id})"
+
+    def delete_comment(self, comment_id: str, activity_urn: str,
+                       dry_run: bool = False, comment_text: str = "") -> dict:
+        """Delete a comment — two-stage, robust.
+
+        PRIMARY (browserless): classic Voyager REST DELETE, verified live (204):
+            DELETE /voyager/api/feed/comments/<url-enc urn:li:comment:(activity:<postId>,<commentId>)>
+        This replaces the old SDUI comments.deleteComment POST, which 500s on a pure-requests
+        replay because it needs the browser's `currentActor` metadata binding (same limitation
+        as unlike/repost — see api-docs/_writes/comment_delete.json).
+
+        FALLBACK (browser): if the REST call fails AND `comment_text` is given, drive the real
+        UI, locating the comment by its VISIBLE TEXT (not its id — the numeric id is not in the
+        rendered DOM). See SessionBrowser.delete_comment_ui.
+
+        comment_id: the numeric comment id (e.g. from get_post_comments' `urn`/`entityUrn`).
+        activity_urn: urn:li:activity:<postId> the comment lives on (a bare id also works).
+        dry_run: build the DELETE request and return it WITHOUT sending (for inspection/tests).
+        comment_text: visible text of the comment — enables the browser fallback.
+        """
+        comment_urn = self._comment_delete_urn(comment_id, activity_urn)
+        url = f"{BASE}/feed/comments/{urllib.parse.quote(comment_urn, safe='')}"
+        if dry_run:
+            return {"dry_run": True, "method": "DELETE", "url": url,
+                    "comment_urn": comment_urn, "comment_id": str(comment_id),
+                    "endpoint": "voyager.feed.comments.delete",
+                    "note": "request built, not sent (dry_run)"}
+        r = self._vg().delete(url)
+        ok = r.status_code in (200, 201, 204)
+        out = {"status": r.status_code, "ok": ok, "comment_id": str(comment_id),
+               "comment_urn": comment_urn, "via": "voyager-rest",
+               "endpoint": "voyager.feed.comments.delete"}
+        if ok or not comment_text:
+            if not ok:
+                out["note"] = ("REST delete failed; pass comment_text to enable the browser "
+                               "fallback (locates the comment by visible text)")
+            return out
+        # REST failed and we have the visible text → browser fallback (by text, not id)
+        self._browser = self._browser or SessionBrowser()
+        self._browser.start()
+        if not self._browser.is_logged_in():
+            raise NotLoggedInError("LinkedIn session expired — log in in the browser window")
+        fb = self._browser.delete_comment_ui(activity_urn, comment_text=comment_text)
+        return {"status": fb.get("status"), "ok": fb.get("ok", False),
+                "comment_id": str(comment_id), "via": "browser-ui-fallback",
+                "rest_status": r.status_code, "note": fb.get("note", "")}
+
     # queryId for the composer's link-preview lookup (rotates on deploys; re-grab via capture).
     _URLPREVIEW_QID = "voyagerContentcreationDashUpdateUrlPreview.b092c1aea4b6c087ec0d09614b3b3320"
 

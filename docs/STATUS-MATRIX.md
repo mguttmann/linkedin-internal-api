@@ -53,7 +53,7 @@ verified live. See `04-WRITE-OPERATIONS.md` for full request/body schemas.
 | **Save / unsave post** | SDUI | `com.linkedin.sdui.update.saveState` (`isSaved` toggle) | ✅ verified (browserless) |
 | **Repost / delete repost** | SDUI / Voyager | `createInstantRepost` / `graphql voyagerFeedDashReposts` | ✅ verified (repost = browser only) |
 | **Create comment** | SDUI | `com.linkedin.sdui.comments.createComment` | ✅ verified |
-| **Delete comment** | SDUI | `com.linkedin.sdui.comments.deleteComment` | ✅ verified |
+| **Delete comment** | Voyager | `DELETE feed/comments/{url-enc urn:li:comment:(activity,<id>)}` | ✅ verified (browserless, 204) |
 | **React to comment** | SDUI | `reactions.create` (commentThreadUrn) | 🟡 captured (browser) |
 | **Send DM / recall / react** | Voyager | `voyagerMessagingDashMessengerMessages?action=…` | ✅ verified (browserless) ² |
 | **Follow / unfollow company** | Voyager | `feed/dash/followingStates/{urn}` PARTIAL_UPDATE | ✅ 201/200 (browserless) |

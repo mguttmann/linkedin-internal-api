@@ -76,23 +76,29 @@ Body: {
 
 ---
 
-## ✅ Delete a comment
+## ✅ Delete a comment — VOYAGER REST (browserless, verified 204)
+
+```
+DELETE /voyager/api/feed/comments/<url-enc urn:li:comment:(activity:<postId>,<commentId>)>   → 204
+```
+- **This is the working browserless path.** Keyed by the comment's canonical `urn` form
+  (activity FIRST, then comment id) — the same value the feed/comments read returns as `urn`.
+- The other two URN forms are **rejected**: `urn:li:fs_objectComment:(<id>,activity:<post>)`
+  (entityUrn) → 400, `urn:li:fsd_comment:(<id>,urn:li:activity:<post>)` (dashEntityUrn) → 400,
+  wrong-order `urn:li:comment:(<post>,<id>)` → 500. A garbage key → 400. So the 204 is a real
+  parse+delete, not a catch-all.
+- **Note:** deleting a top-level comment does NOT delete its replies — replies survive as
+  orphans and must be deleted separately.
+
+### ⚠️ SDUI `comments.deleteComment` (POST) — does NOT work browserless
 
 ```
 POST /flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.comments.deleteComment
-Body: {
-  "requestId": "com.linkedin.sdui.comments.deleteComment",
-  "serverRequest": { ...
-    "payload": {
-      "commentUrn": { "commentId": "<id>", "thread": "urn:li:activity:<postId>" },
-      "containerThreadUrn": { "threadUrnActivityThreadUrn": { "activityUrn": { "activityId": "<postId>" }}}
-    }
-  }
-}
 ```
-- **Verified.** ✅
-- **Note:** deleting a top-level comment does NOT delete its replies — replies survive as
-  orphans and must be deleted separately.
+Returns **500** on a pure-requests replay: the body needs the browser's
+`requestMetadata.currentActor` binding (`identitySwitcherActorContext-<urn>` + `stringBinding`),
+which only the live SDUI client sets — same limitation as unlike/repost. Superseded by the
+Voyager REST DELETE above. (Capture: `api-docs/_writes/comment_delete.json`.)
 
 ---
 

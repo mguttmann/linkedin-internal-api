@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -184,6 +185,126 @@ class SessionBrowser:
         if not self._page:
             raise RuntimeError("call start() first")
         return self._page
+
+    def post_comment_ui(self, activity_urn: str, text: str, timeout_ms: int = 30000) -> dict:
+        """Post a TOP-LEVEL comment by driving the real UI (the only reliable way).
+
+        createComment can't be POST-replayed: LinkedIn binds the text to a server-side
+        state key (commentBoxText-<...>, MemoryNamespace) that only exists once the comment
+        box has rendered. So we open the post, focus the comment editor, type like a human,
+        and click the submit button. Returns {ok, status, note}. Requires a live session.
+        """
+        if not self._page:
+            raise RuntimeError("call start() first")
+        import random
+        page = self._page
+        activity_id = activity_urn.split(":")[-1]
+        page.goto(f"https://www.linkedin.com/feed/update/urn:li:activity:{activity_id}/",
+                  wait_until="domcontentloaded", timeout=timeout_ms)
+        time.sleep(3.0)
+        # focus the top-level comment editor (first contenteditable comment box under the post)
+        editor = page.locator(
+            '.comments-comment-box [contenteditable="true"], '
+            '[contenteditable="true"][aria-label*="Kommentar"], '
+            '[contenteditable="true"][aria-label*="omment"], '
+            '.tiptap.ProseMirror[contenteditable="true"]'
+        ).first
+        editor.wait_for(state="visible", timeout=timeout_ms)
+        editor.scroll_into_view_if_needed()
+        editor.click()
+        time.sleep(random.uniform(0.6, 1.2))
+        # type char-by-char with jitter (human pacing)
+        for ch in text:
+            page.keyboard.type(ch)
+            time.sleep(random.uniform(0.02, 0.09))
+        time.sleep(random.uniform(1.0, 1.8))
+        # the submit button appears once there's text; match DE + EN labels
+        btn = page.locator(
+            'button.comments-comment-box__submit-button--cr, '
+            'button.comments-comment-box__submit-button, '
+            'button:has-text("Kommentieren"), button:has-text("Comment")'
+        ).first
+        btn.wait_for(state="visible", timeout=8000)
+        btn.click()
+        time.sleep(3.0)
+        return {"ok": True, "status": 200, "note": "submitted via UI — verify with get_post_comments"}
+
+    def delete_comment_ui(self, activity_urn: str, comment_text: str = "",
+                          comment_id: str = "", timeout_ms: int = 30000) -> dict:
+        """Delete one of the owner's comments by driving the UI (deleteComment 500s on replay,
+        same currentActor issue as create).
+
+        Locates the comment by its VISIBLE TEXT (comment_text) — NOT by numeric id. The raw
+        comment id never appears as an href/data-id in the SDUI-rendered DOM, so the old
+        id-based search always timed out. We match the text, walk up to the comment container,
+        hover to reveal its ⋯ options button, open the menu, click Delete, and confirm.
+
+        comment_text: the visible text (or a distinctive substring) of the comment to delete.
+        comment_id: accepted for backwards-compat / logging only; not used for locating.
+        Returns {ok, status, note}.
+        """
+        if not self._page:
+            raise RuntimeError("call start() first")
+        if not comment_text:
+            return {"ok": False, "status": None,
+                    "note": "comment_text required — the browser fallback locates the comment "
+                            "by visible text (the numeric id is not in the rendered DOM)"}
+        import random
+        page = self._page
+        activity_id = activity_urn.split(":")[-1]
+        page.goto(f"https://www.linkedin.com/feed/update/urn:li:activity:{activity_id}/",
+                  wait_until="domcontentloaded", timeout=timeout_ms)
+        time.sleep(3.0)
+        # locate the comment by its visible text, scrolling the comments area until it renders
+        text_node = page.get_by_text(comment_text, exact=False).first
+        found = False
+        for _ in range(8):
+            try:
+                if text_node.count():
+                    found = True
+                    break
+            except Exception:
+                pass
+            page.mouse.wheel(0, 1400); time.sleep(1.0)
+            text_node = page.get_by_text(comment_text, exact=False).first
+        if not found:
+            return {"ok": False, "status": None,
+                    "note": f"comment matching text {comment_text!r} not found in DOM to delete"}
+        text_node.scroll_into_view_if_needed()
+        # walk up to the comment container (article.comments-comment-entity or the comment-item div)
+        article = text_node.locator(
+            "xpath=ancestor-or-self::*[contains(@class,'comments-comment-entity') "
+            "or contains(@class,'comments-comment-item')][1]"
+        ).first
+        try:
+            article.wait_for(state="visible", timeout=8000)
+        except Exception:
+            # fall back to the nearest article ancestor
+            article = text_node.locator("xpath=ancestor::article[1]").first
+        article.scroll_into_view_if_needed()
+        # hover to reveal the ⋯ options control (it's hidden until hover on many layouts)
+        try:
+            article.hover()
+        except Exception:
+            pass
+        time.sleep(random.uniform(0.4, 0.8))
+        # open the ⋯ options menu within this comment (DE 'Kommentaroptionen'/'Optionen', EN 'options'/'More')
+        menu_btn = article.locator(
+            'button[aria-label*="Kommentaroptionen"], button[aria-label*="ptionen"], '
+            'button[aria-label*="options"], button[aria-label*="Options"], '
+            'button[aria-label*="More"], button.comments-comment-options-dropdown__trigger, '
+            'button[aria-haspopup="true"]'
+        ).first
+        menu_btn.wait_for(state="visible", timeout=8000)
+        menu_btn.click()
+        time.sleep(random.uniform(0.6, 1.1))
+        # click "Löschen" / "Delete" in the opened dropdown
+        page.get_by_role("button", name=re.compile(r"(Löschen|Delete)", re.I)).first.click()
+        time.sleep(random.uniform(0.6, 1.1))
+        # confirm dialog
+        page.get_by_role("button", name=re.compile(r"(Löschen|Delete)", re.I)).last.click()
+        time.sleep(2.5)
+        return {"ok": True, "status": 200, "note": "deleted via UI — verify with get_post_comments"}
 
 
 if __name__ == "__main__":  # manual smoke (needs a display + human login)

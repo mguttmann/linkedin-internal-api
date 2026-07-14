@@ -6,6 +6,7 @@ Run:  .venv/bin/python tests/test_client.py   (exit 0 = green)
 Covers the network-body logic that test_server.py can't: like/unlike endpoint + payload +
 honest error handling. Live behaviour is proven separately (like → 201, unlike → 500 browserless).
 """
+import json
 import os
 import sys
 import types
@@ -29,7 +30,7 @@ def _client(post_code=201):
     calls = {"post": [], "delete": [], "get": []}
     fake = types.ModuleType("vgreq")
     fake.post = lambda url, body=None, *a, **k: (calls["post"].append((url, body)) or _Resp(post_code))
-    fake.delete = lambda url, *a, **k: (calls["delete"].append(url) or _Resp(400))
+    fake.delete = lambda url, *a, **k: (calls["delete"].append(url) or _Resp(post_code))
     fake.get = lambda url, *a, **k: (calls["get"].append(url) or _Resp(200))
     sys.modules["vgreq"] = fake
     import importlib
@@ -170,6 +171,102 @@ def test_get_post_comments_url_shape():
     url = calls["get"][-1]
     assert "feed/comments?q=comments" in url
     assert "updateId=urn%3Ali%3Aactivity%3A999" in url
+
+
+def test_delete_comment_dry_run_builds_voyager_rest_delete():
+    # The primary path is the classic Voyager REST DELETE (verified live 204), NOT the SDUI
+    # comments.deleteComment POST (which 500s browserless — needs currentActor). dry_run must
+    # build the exact URL + comment urn without sending anything.
+    li, calls = _client(204)
+    res = li.delete_comment("7481685874066300928",
+                            "urn:li:activity:7469679647589412864", dry_run=True)
+    # nothing was sent
+    assert calls["delete"] == [] and calls["post"] == []
+    assert res["dry_run"] is True and res["method"] == "DELETE"
+    # canonical comment urn: activity FIRST, then comment id (the `urn` form, not fs_objectComment)
+    assert res["comment_urn"] == \
+        "urn:li:comment:(activity:7469679647589412864,7481685874066300928)"
+    # url = feed/comments/<url-encoded urn>  (NOT the sdui rsc-action route)
+    assert "voyager/api/feed/comments/" in res["url"]
+    assert "rsc-action" not in res["url"] and "sduiid" not in res["url"]
+    # the urn must be url-encoded into the path segment
+    assert "urn%3Ali%3Acomment%3A%28activity%3A7469679647589412864%2C7481685874066300928%29" \
+        in res["url"]
+    assert res["endpoint"] == "voyager.feed.comments.delete"
+
+
+def test_delete_comment_sends_delete_to_feed_comments():
+    # live path (mocked): must issue an HTTP DELETE to the feed/comments route and report ok on 204.
+    li, calls = _client(204)
+    res = li.delete_comment("222", "urn:li:activity:111")
+    assert len(calls["delete"]) == 1, "must use HTTP DELETE (not POST)"
+    url = calls["delete"][-1]
+    assert "voyager/api/feed/comments/" in url
+    assert "urn%3Ali%3Acomment%3A%28activity%3A111%2C222%29" in url
+    assert res["ok"] is True and res["status"] == 204 and res["via"] == "voyager-rest"
+
+
+def test_delete_comment_accepts_bare_activity_id():
+    # a bare numeric activity id (no urn:li:activity: prefix) must still build the right urn.
+    li, calls = _client(204)
+    res = li.delete_comment("222", "111", dry_run=True)
+    assert res["comment_urn"] == "urn:li:comment:(activity:111,222)"
+
+
+def test_create_comment_browserless_dry_run_builds_sdui_body():
+    # BROWSERLESS comment create via the VERIFIED SDUI createComment route. dry_run must
+    # build the request WITHOUT sending, target the flagship-web SDUI endpoint, and carry
+    # the TEXT AS A REAL LITERAL in the (raw JSON string) body — plus a freshly-minted token.
+    li, calls = _client(200)
+    res = li.create_comment_browserless("urn:li:activity:12345", "hallo welt", dry_run=True)
+    # 1) nothing was sent
+    assert calls["post"] == [], "dry_run must NOT hit the network"
+    # 2) route = SDUI createComment
+    assert res["via"] == "sdui-browserless"
+    assert res["ok"] is None and res["status"] == "dry_run"
+    assert "sduiid=com.linkedin.sdui.comments.createComment" in res["url"]
+    # 3) body is a RAW JSON STRING with the text as a literal + the activity id filled in
+    body = res["body_sent"]
+    assert isinstance(body, str), "SDUI body is a raw JSON string (posted with is_json=False)"
+    assert "hallo welt" in body, "the comment text must be present as a literal"
+    assert "12345" in body, "the activity id must be substituted into the template"
+    assert "{{TOKEN}}" not in body and "{{TEXT}}" not in body, "all placeholders must be filled"
+    assert "commentBoxText-" in body, "the minted state-key token must be embedded"
+
+
+def test_mint_comment_token_is_unique_and_decodable():
+    # the state-key token is self-minted ({timestamp varint + 16 random bytes}); two mints
+    # must differ (random trackingId) and be valid base64url.
+    import base64
+    import lib.client as cl
+    t1 = cl.LinkedInClient._mint_comment_token()
+    t2 = cl.LinkedInClient._mint_comment_token()
+    assert t1 != t2, "each mint must be unique (random trackingId)"
+    raw = base64.urlsafe_b64decode(t1 + "=" * (-len(t1) % 4))
+    assert raw[0] == 0x0A, "field1 (timestamp message) tag expected"
+    assert b"\x12\x10" in raw, "field2 = 16-byte trackingId length-delimited"
+
+
+def test_create_comment_browserless_live_send_and_urn_extract():
+    # dry_run=False actually posts the raw body to the SDUI route and surfaces via=sdui-browserless.
+    li, calls = _client(200)
+    res = li.create_comment_browserless("urn:li:activity:777", "text", dry_run=False)
+    url, body = calls["post"][-1]
+    assert "sduiid=com.linkedin.sdui.comments.createComment" in url
+    assert isinstance(body, str) and "text" in body and "777" in body
+    assert res["ok"] is True and res["via"] == "sdui-browserless" and res["status"] == 200
+
+
+def test_create_comment_prefers_browserless_no_browser():
+    # the wrapper must try the browserless SDUI route FIRST and, on success, never touch the browser.
+    li, calls = _client(200)
+    # guard: if it tried the browser, SessionBrowser().start() would blow up in this env
+    res = li.create_comment("urn:li:activity:42", "hey")
+    url, body = calls["post"][-1]
+    assert "sduiid=com.linkedin.sdui.comments.createComment" in url
+    assert isinstance(body, str) and "hey" in body
+    assert res["ok"] is True and res["via"] == "sdui-browserless"
+    assert res["activity_id"] == "42"
 
 
 def test_save_post_toggles_is_saved_with_literal_id():
