@@ -95,6 +95,33 @@ def test_unlike_is_honest_on_error(monkeypatch):
     assert "template may have rotated" in res.get("note", ""), "must explain the fallback"
 
 
+def test_react_to_comment_posts_sdui_template_browserless(monkeypatch):
+    # react_to_comment replays the reactions.create template with BOTH ids filled (comment id +
+    # post activity id) via requests.post with minimal headers — same browserless SDUI pattern.
+    import lib.client as cl
+    sent = {}
+
+    class _R:
+        status_code = 200
+        text = ""
+        headers = {}
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        sent["url"] = url
+        sent["body"] = data.decode() if isinstance(data, (bytes, bytearray)) else data
+        return _R()
+
+    monkeypatch.setattr(cl.requests, "post", fake_post)
+    monkeypatch.setattr(cl.LinkedInClient, "_sdui_min_headers",
+                        staticmethod(lambda: {"csrf-token": "ajax:x", "Cookie": "k=v",
+                                              "Content-Type": "application/json"}))
+    res = cl.LinkedInClient().react_to_comment("888", _URN)
+    assert "sduiid=com.linkedin.sdui.reactions.create" in sent["url"]
+    assert "888" in sent["body"] and _AID in sent["body"], "both ids must be substituted"
+    assert "{{COMMENT_ID}}" not in sent["body"] and "{{ACTIVITY_ID}}" not in sent["body"]
+    assert res["ok"] is True and res["via"] == "sdui-browserless" and res["comment_id"] == "888"
+
+
 def test_get_my_posts_uses_exact_captured_url_shape():
     # regression guard: the queryId hash + ordered variables + includeWebMetadata must match the
     # live-captured shape (a guessed shape returned non-JSON / broke).
@@ -378,7 +405,7 @@ def test_save_post_toggles_is_saved_with_literal_id():
 def test_repost_is_honest_on_500():
     li, _ = _client(500)
     r = li.repost("999")
-    assert r["ok"] is False and "currentActor" in r.get("note", "")
+    assert r["ok"] is False and "re-capture" in r.get("note", "") and "No browser" in r.get("note", "")
 
 
 def test_send_dm_body_has_tracking_and_dedupe():

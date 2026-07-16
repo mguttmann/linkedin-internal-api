@@ -54,8 +54,15 @@ def test_people_facing_tools_gate_on_confirm():
 
 
 def test_no_browser_on_import():
-    # LinkedInClient must be lazy: importing the server starts no browser.
-    assert server.li._browser is None
+    # The client is a PURE API client: it must have NO browser attribute and never reference
+    # SessionBrowser. (Importing the server must not pull in patchright / launch anything.)
+    assert not hasattr(server.li, "_browser"), "client must not carry a browser handle"
+    import lib.client as _cl
+    import inspect
+    src = inspect.getsource(_cl)
+    assert "SessionBrowser" not in src, "client.py must not reference SessionBrowser"
+    assert "post_comment_ui" not in src and "delete_comment_ui" not in src, \
+        "client.py must not drive the browser UI"
 
 
 def main():

@@ -3,11 +3,12 @@
 Run:  python server.py           (stdio, for Claude Desktop / Cursor / Hermes)
       python server.py --http    (HTTP transport, for remote/shared use)
 
-Tools are thin wrappers over LinkedInClient (requests-first, patchright browser-fallback).
-Reads and writes are wired, each backed by a live-captured request body. People-facing and
-destructive tools require confirm=True (guardrail, see docs/MCP-DESIGN.md §5).
+Tools are thin wrappers over LinkedInClient — a PURE requests-based API client. No browser,
+no clicking. Reads and writes are wired, each backed by a live-captured request body.
+People-facing and destructive tools require confirm=True (guardrail, see docs/MCP-DESIGN.md §5).
 
-Nothing connects at import time — the browser/session is lazy.
+Nothing connects at import time. Session login/refresh is handled OUTSIDE the MCP by
+session_daemon.py, which keeps /tmp/li_cookies.json fresh.
 """
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ def get_post_comments(activity_urn: str) -> dict:
 def create_comment(activity_urn: str, text: str, confirm: bool = False) -> dict:
     """Post a top-level comment on a post (activity_urn = urn:li:activity:<id>, or a bare id).
     People-facing → requires confirm=True. Returns status + the new comment URN when resolvable.
-    Note: SDUI action; if it 500s it needs the browser currentActor binding (see docs/07)."""
+    Pure API (SDUI createComment, verified browserless 200). No browser."""
     if not confirm:
         return {"needs_confirmation": True, "activity_urn": activity_urn, "preview": text}
     li.ensure_session()
@@ -87,8 +88,7 @@ def create_comment(activity_urn: str, text: str, confirm: bool = False) -> dict:
 
 @mcp.tool
 def delete_comment(comment_id: str, activity_urn: str, confirm: bool = False,
-                   comment_text: str = "", dry_run: bool = False,
-                   force: bool = False) -> dict:
+                   dry_run: bool = False, force: bool = False) -> dict:
     """Delete a comment. comment_id = the numeric comment id; activity_urn = the post it's on
     (urn:li:activity:<id>). Destructive → requires confirm=True.
 
@@ -96,15 +96,14 @@ def delete_comment(comment_id: str, activity_urn: str, confirm: bool = False,
     else's comment (e.g. a reply on your post) is refused unless force=True — this prevents
     accidentally removing a real person's comment during testing.
 
-    Primary path is the browserless Voyager REST DELETE (verified 204). If it fails and
-    comment_text (the comment's visible text) is supplied, falls back to the browser UI, which
-    locates the comment by that text. dry_run=True builds+returns the request without sending."""
+    Pure API: browserless Voyager REST DELETE (verified 204). dry_run=True builds+returns the
+    request without sending. No browser fallback."""
     if dry_run:
-        return li.delete_comment(comment_id, activity_urn, dry_run=True, comment_text=comment_text)
+        return li.delete_comment(comment_id, activity_urn, dry_run=True)
     if not confirm:
         return {"needs_confirmation": True, "comment_id": comment_id, "activity_urn": activity_urn}
     li.ensure_session()
-    return li.delete_comment(comment_id, activity_urn, comment_text=comment_text, force=force)
+    return li.delete_comment(comment_id, activity_urn, force=force)
 
 
 @mcp.tool
@@ -117,18 +116,22 @@ def get_link_preview(url: str) -> dict:
 
 @mcp.tool
 def session_status() -> dict:
-    """Check whether the LinkedIn session is live (does NOT launch the browser)."""
-    ok = li.ensure_session(allow_browser=False)
+    """Check whether the LinkedIn session is live (a /me probe). Pure API, no browser."""
+    ok = li.ensure_session()
     return {"logged_in": ok,
-            "hint": None if ok else "run refresh_session to log in via the browser"}
+            "hint": None if ok else ("session cookies are stale — the external session_daemon.py "
+                                     "refreshes /tmp/li_cookies.json; (re)start it to log in")}
 
 
 @mcp.tool
 def refresh_session() -> dict:
-    """Refresh LinkedIn cookies from the persistent patchright browser (launches Chrome;
-    on first run, log in once in the window). Use when session_status reports logged_in=false."""
-    ok = li.ensure_session(allow_browser=True)
-    return {"logged_in": ok}
+    """Re-check the session against the current cookie file (does NOT launch a browser).
+
+    Login/refresh is handled OUTSIDE the MCP by session_daemon.py, which keeps the cookie file
+    fresh. This tool just re-probes /me; if it's still logged_in=false, (re)start the daemon."""
+    ok = li.ensure_session()
+    return {"logged_in": ok,
+            "hint": None if ok else "cookies still stale — (re)start session_daemon.py to log in"}
 
 
 # ── Engagement writes (verified endpoints, live-captured bodies) ─────────
@@ -193,7 +196,7 @@ def save_post(activity_id: str, save: bool = True) -> dict:
 @mcp.tool
 def repost(activity_id: str, confirm: bool = False) -> dict:
     """Instant-repost a post to the owner's feed. People-facing → requires confirm=True.
-    (Browserless returns 500; reliable via the browser path.)"""
+    Pure API (SDUI createInstantRepost). If it 500s, re-capture the full body as a template."""
     if not confirm:
         return {"needs_confirmation": True, "activity_id": activity_id}
     li.ensure_session()
@@ -271,6 +274,16 @@ def react_to_message(message_urn: str, emoji: str = "👏") -> dict:
     """React to a message with an emoji (toggle: re-send the same emoji to remove it)."""
     li.ensure_session()
     return li.react_to_message(message_urn, emoji)
+
+
+@mcp.tool
+def react_to_comment(comment_id: str, activity_urn: str, confirm: bool = False) -> dict:
+    """Like a comment — browserless (SDUI reactions.create). comment_id = the numeric comment id;
+    activity_urn = the post the comment is on (urn:li:activity:<id>). People-facing → confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "comment_id": comment_id, "activity_urn": activity_urn}
+    li.ensure_session()
+    return li.react_to_comment(comment_id, activity_urn)
 
 
 def main():

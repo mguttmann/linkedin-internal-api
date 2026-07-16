@@ -1,13 +1,12 @@
-"""client.py — LinkedInClient facade: requests-first, browser-fallback.
+"""client.py — LinkedInClient: a PURE requests-based LinkedIn API client. NO browser.
 
-The single entry point the MCP tools call. Picks the execution path per operation:
-  - read + safe writes  -> pure requests via vgreq (browserless, primary)
-  - session refresh / SDUI form deletes -> SessionBrowser (patchright, fallback)
+The single entry point the MCP tools call. Every operation talks to LinkedIn's internal API
+directly via vgreq (requests), reading cookies from the session file that the external
+session_daemon.py keeps fresh. It never launches Chrome, never clicks, never falls back to a
+browser — if the session is dead or an endpoint 500s, tools return an honest error.
 
 See docs/MCP-DESIGN.md. Read AND write tools are wired: each carries a live-captured request
-body (verified endpoint names + schemas from docs/04, 06-25). A few SDUI writes (unlike, repost)
-need the browser's currentActor binding and return an honest note on the browserless 500; the
-rest run browserless. Nothing here connects on import.
+body (verified endpoint names + schemas from docs/04, 06-25). Nothing here connects on import.
 """
 
 from __future__ import annotations
@@ -32,8 +31,6 @@ except Exception:  # pragma: no cover
     vgreq = None  # type: ignore
     _HAVE_VGREQ = False
 
-from .session_browser import SessionBrowser, NotLoggedInError  # noqa: E402
-
 BASE = "https://www.linkedin.com/voyager/api"
 # Owner identity comes from the environment — no PII hard-coded in the repo.
 # Set LI_OWNER_URN (urn:li:fsd_profile:<id>) and LI_OWNER_VANITY (public vanity name)
@@ -49,35 +46,27 @@ POLL_QID = "voyagerFeedDashPollsPollSummary.f8ad99cf791d833d37dddb373d06fb3a"
 
 
 class LinkedInClient:
-    """Facade over vgreq (requests) + SessionBrowser (patchright).
+    """Pure requests-based LinkedIn client (vgreq). NO browser, ever.
 
-    lazy: the browser is only started when a session refresh is actually needed, so importing
-    and listing tools never launches Chrome.
+    The MCP is a clean API client: it reads cookies from the session file (kept fresh by the
+    separate session_daemon.py) and talks to the internal API directly. It never launches
+    Chrome, never clicks, never falls back to a browser. If the session is dead, tools return
+    an honest error pointing at the daemon — the login/refresh concern lives OUTSIDE the MCP.
     """
 
     def __init__(self, cookies_path: str = "/tmp/li_cookies.json"):
         self.cookies_path = cookies_path
-        self._browser: Optional[SessionBrowser] = None
 
     # --- session ---------------------------------------------------------
-    def ensure_session(self, allow_browser: bool = True) -> bool:
-        """Make sure vgreq has valid cookies. Returns True if the session is live.
+    def ensure_session(self, allow_browser: bool = False) -> bool:
+        """Return True if the session cookies are live (a /me probe returns 200).
 
-        Tries the existing cookie file first (cheap). Only spins up the patchright browser to
-        refresh if needed AND allowed.
+        Pure check — NEVER launches a browser. Session login/refresh is the job of the
+        external session_daemon.py, which keeps the cookie file fresh. The allow_browser
+        parameter is retained for signature compatibility but is ignored.
         """
         if not _HAVE_VGREQ:
             raise RuntimeError("vgreq not importable — check repo layout")
-        if self._session_ok():
-            return True
-        if not allow_browser:
-            return False
-        # refresh cookies from the persistent browser session
-        self._browser = self._browser or SessionBrowser()
-        self._browser.start()
-        if not self._browser.is_logged_in():
-            raise NotLoggedInError("LinkedIn session expired — log in in the browser window")
-        self._browser.dump_cookies(self.cookies_path)
         return self._session_ok()
 
     def _session_ok(self) -> bool:
@@ -265,44 +254,22 @@ class LinkedInClient:
             pass
         if not ok:
             out["note"] = ("sdui createComment returned non-2xx — token/template may have "
-                           "rotated (re-capture with tools/capture); create_comment() falls "
-                           "back to the browser")
+                           "rotated; re-capture with tools/capture. (No browser fallback: this "
+                           "is a pure API client.)")
         return out
 
     def create_comment(self, activity_urn: str, text: str) -> dict:
-        """Post a top-level comment. Tries the BROWSERLESS Voyager-REST route first, then falls
-        back to driving the real UI (browser) only if that fails.
+        """Post a top-level comment — BROWSERLESS (SDUI createComment, verified live 2026-07-14).
 
-        Primary path (no Chrome): create_comment_browserless() → classic Voyager `feed/comments`
-        collection with the text as a real literal in the body (`commentV2.text`).
-
-        Fallback: the web SDUI createComment action binds the text to a server-side state key
-        (commentBoxText-<...>, MemoryNamespace) that only exists after the comment box has
-        rendered — the text is never in the SDUI request body (confirmed by live capture
-        2026-07-14, api-docs/_writes/comment_create.json). So the fallback opens the post in the
-        logged-in browser, types into the editor, and clicks submit. activity_urn: urn:li:activity:<id>.
+        Pure API: replays the captured SDUI body with a self-minted token + minimal headers.
+        No browser, no clicking. If the API call fails, returns an honest error (the caller can
+        re-capture the template) — it never falls back to Chrome.
+        activity_urn: urn:li:activity:<id>.
         """
         activity_id = activity_urn.rsplit(":", 1)[-1] if ":" in activity_urn else activity_urn
-        # 1) browserless first — the whole point of this method
-        try:
-            rest = self.create_comment_browserless(f"urn:li:activity:{activity_id}", text)
-        except Exception as exc:  # vgreq/session problem — degrade to browser
-            rest = {"ok": False, "status": None, "via": "voyager-rest",
-                    "note": f"voyager-rest raised: {exc}"}
-        if rest.get("ok"):
-            rest["activity_id"] = activity_id
-            return rest
-        # 2) browser fallback (SDUI needs the rendered comment box + currentActor binding)
-        self._browser = self._browser or SessionBrowser()
-        self._browser.start()
-        if not self._browser.is_logged_in():
-            raise NotLoggedInError("LinkedIn session expired — log in in the browser window")
-        res = self._browser.post_comment_ui(f"urn:li:activity:{activity_id}", text)
-        return {"status": res.get("status"), "ok": res.get("ok", False),
-                "activity_id": activity_id, "via": "browser-fallback",
-                "browserless_attempt": {"status": rest.get("status"),
-                                        "body_sent": rest.get("body_sent")},
-                "note": res.get("note", "")}
+        res = self.create_comment_browserless(f"urn:li:activity:{activity_id}", text)
+        res["activity_id"] = activity_id
+        return res
 
     @staticmethod
     def _comment_delete_urn(comment_id: str, activity_urn: str) -> str:
@@ -337,9 +304,8 @@ class LinkedInClient:
         return None
 
     def delete_comment(self, comment_id: str, activity_urn: str,
-                       dry_run: bool = False, comment_text: str = "",
-                       force: bool = False) -> dict:
-        """Delete a comment — two-stage, robust, with an OWNER-ONLY safety guard.
+                       dry_run: bool = False, force: bool = False) -> dict:
+        """Delete a comment — BROWSERLESS, with an OWNER-ONLY safety guard.
 
         SAFETY GUARD (default): only deletes comments whose author is the owner
         (LI_OWNER_URN). Deleting someone ELSE's comment requires force=True. This exists
@@ -347,20 +313,12 @@ class LinkedInClient:
         makes that impossible by accident. The guard reads the comment's author first; if the
         comment can't be found (already gone / unreadable), the delete proceeds (idempotent).
 
-        PRIMARY (browserless): classic Voyager REST DELETE, verified live (204):
+        Route (pure API, verified live 204):
             DELETE /voyager/api/feed/comments/<url-enc urn:li:comment:(activity:<postId>,<commentId>)>
-        This replaces the old SDUI comments.deleteComment POST, which 500s on a pure-requests
-        replay because it needs the browser's `currentActor` metadata binding (same limitation
-        as unlike/repost — see api-docs/_writes/comment_delete.json).
-
-        FALLBACK (browser): if the REST call fails AND `comment_text` is given, drive the real
-        UI, locating the comment by its VISIBLE TEXT (not its id — the numeric id is not in the
-        rendered DOM). See SessionBrowser.delete_comment_ui.
 
         comment_id: the numeric comment id (e.g. from get_post_comments' `urn`/`entityUrn`).
         activity_urn: urn:li:activity:<postId> the comment lives on (a bare id also works).
         dry_run: build the DELETE request and return it WITHOUT sending (for inspection/tests).
-        comment_text: visible text of the comment — enables the browser fallback.
         force: bypass the owner-only guard to delete another person's comment (opt-in).
         """
         # --- owner-only safety guard (unless forced or just building a dry_run) ---
@@ -386,20 +344,10 @@ class LinkedInClient:
         out = {"status": r.status_code, "ok": ok, "comment_id": str(comment_id),
                "comment_urn": comment_urn, "via": "voyager-rest",
                "endpoint": "voyager.feed.comments.delete"}
-        if ok or not comment_text:
-            if not ok:
-                out["note"] = ("REST delete failed; pass comment_text to enable the browser "
-                               "fallback (locates the comment by visible text)")
-            return out
-        # REST failed and we have the visible text → browser fallback (by text, not id)
-        self._browser = self._browser or SessionBrowser()
-        self._browser.start()
-        if not self._browser.is_logged_in():
-            raise NotLoggedInError("LinkedIn session expired — log in in the browser window")
-        fb = self._browser.delete_comment_ui(activity_urn, comment_text=comment_text)
-        return {"status": fb.get("status"), "ok": fb.get("ok", False),
-                "comment_id": str(comment_id), "via": "browser-ui-fallback",
-                "rest_status": r.status_code, "note": fb.get("note", "")}
+        if not ok:
+            out["note"] = ("REST delete returned non-2xx — verify the comment id/urn via "
+                           "get_post_comments. (No browser fallback: this is a pure API client.)")
+        return out
 
     # queryId for the composer's link-preview lookup (rotates on deploys; re-grab via capture).
     _URLPREVIEW_QID = "voyagerContentcreationDashUpdateUrlPreview.b092c1aea4b6c087ec0d09614b3b3320"
@@ -439,15 +387,17 @@ class LinkedInClient:
         return {"Content-Type": "application/json", "csrf-token": csrf,
                 "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items())}
 
-    def _post_sdui_template(self, tpl_name: str, activity_id: str, sduiid: str):
-        """POST a captured SDUI request body (templates/<tpl_name>) with {{ACTIVITY_ID}} filled,
-        using minimal SDUI headers. Returns the raw requests.Response.
+    def _post_sdui_template(self, tpl_name: str, subs: dict, sduiid: str):
+        """POST a captured SDUI request body (templates/<tpl_name>) with placeholders filled
+        from `subs` ({{KEY}} → value), using minimal SDUI headers. Returns requests.Response.
         Reverse-engineered pattern: SDUI writes replay verbatim from the captured full body
-        (partial hand-built bodies 500); only the activity id differs per call.
+        (partial hand-built bodies 500); only the ids differ per call.
         """
         tpl_path = os.path.join(os.path.dirname(__file__), "templates", tpl_name)
         with open(tpl_path, "r", encoding="utf-8") as fh:
-            body = fh.read().replace("{{ACTIVITY_ID}}", activity_id)
+            body = fh.read()
+        for key, val in subs.items():
+            body = body.replace(key, val)
         url = ("https://www.linkedin.com/flagship-web/rsc-action/actions/server-request"
                f"?sduiid={sduiid}")
         return requests.post(url, data=body.encode("utf-8"),
@@ -462,13 +412,34 @@ class LinkedInClient:
         with minimal headers (csrf + cookies + content-type).
         """
         activity_id = activity_urn.rsplit(":", 1)[-1]
-        r = self._post_sdui_template("unlike_sdui.json.tpl", activity_id,
+        r = self._post_sdui_template("unlike_sdui.json.tpl", {"{{ACTIVITY_ID}}": activity_id},
                                      "com.linkedin.sdui.reactions.delete")
         ok = r.status_code in (200, 201, 204)
         out = {"status": r.status_code, "ok": ok, "via": "sdui-browserless",
                "activity_urn": activity_urn, "endpoint": "sdui.reactions.delete"}
         if not ok:
             out["note"] = ("sdui unlike returned non-2xx — template may have rotated "
+                           "(re-capture); the browser path remains as fallback")
+        return out
+
+    def react_to_comment(self, comment_id: str, activity_urn: str) -> dict:
+        """React (LIKE) to a comment — BROWSERLESS (VERIFIED 2026-07-14, live 200, reaction set).
+
+        Same SDUI pattern as unlike: replay the captured reactions.create body from a template
+        (comment id + post activity id filled in) with minimal headers. The reaction targets the
+        comment via threadUrnCommentThreadUrn (commentUrn = {commentId, thread}), not the post.
+        """
+        activity_id = activity_urn.rsplit(":", 1)[-1]
+        r = self._post_sdui_template(
+            "react_comment_sdui.json.tpl",
+            {"{{COMMENT_ID}}": str(comment_id), "{{ACTIVITY_ID}}": activity_id},
+            "com.linkedin.sdui.reactions.create")
+        ok = r.status_code in (200, 201, 204)
+        out = {"status": r.status_code, "ok": ok, "via": "sdui-browserless",
+               "comment_id": str(comment_id), "activity_urn": activity_urn,
+               "endpoint": "sdui.reactions.create"}
+        if not ok:
+            out["note"] = ("sdui react_to_comment returned non-2xx — template may have rotated "
                            "(re-capture); the browser path remains as fallback")
         return out
 
@@ -740,9 +711,10 @@ class LinkedInClient:
                 "activity_id": activity_id, "saved": bool(save)}
 
     def repost(self, activity_id: str) -> dict:
-        """Instant repost ("Sofort teilen"). VERIFIED endpoint (SDUI createInstantRepost, docs/10).
-        NOTE: like unlike, this SDUI action needs the browser's currentActor binding — pure
-        requests returns 500. Use the browser fallback for a reliable repost.
+        """Instant repost ("Sofort teilen") — SDUI createInstantRepost.
+        NOTE: this SDUI action can 500 on a plain vgreq replay (needs the currentActor binding
+        in the full captured body). Pure API only — no browser. If it 500s, re-capture the full
+        SDUI body as a template (same pattern as unlike/react_to_comment) and replay that.
         """
         url = self._sdui_url("com.linkedin.sdui.feed.requests.createInstantRepost")
         body = {
@@ -762,8 +734,8 @@ class LinkedInClient:
         out = {"status": r.status_code, "ok": ok, "activity_id": activity_id,
                "endpoint": "sdui.createInstantRepost"}
         if not ok:
-            out["note"] = ("browserless repost not supported (SDUI needs currentActor binding, "
-                           "like unlike) — use the browser path")
+            out["note"] = ("repost 500'd on plain replay — re-capture the full SDUI body as a "
+                           "template and replay with minimal headers (like unlike). No browser.")
         return out
 
     # queryId for repost-delete rotates on deploys; re-grab via capture if it 404s.
@@ -780,8 +752,3 @@ class LinkedInClient:
         r = self._vg().post(url, body)
         return {"status": r.status_code, "ok": r.status_code in (200, 201, 204),
                 "repost_urn": repost_urn}
-
-    def close(self):
-        if self._browser:
-            self._browser.stop()
-            self._browser = None
