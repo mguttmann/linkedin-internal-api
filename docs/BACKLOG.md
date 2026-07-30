@@ -260,6 +260,61 @@ still one call away.
 **To decide:** whether these get `confirm=True` as well (changes the tool contract for every
 existing caller) or stay ungated by intent. Not a defect — a design decision.
 
+## ⏳ Session age / cookie inventory in `session_status` — designed, NOT built
+
+**Status:** fully specified against the current tree, no code written (2026-07-31).
+**Design + evidence:** [`SESSION-AND-ERRORS-DESIGN.md`](SESSION-AND-ERRORS-DESIGN.md) §1.
+
+`session_status` returns only `logged_in`, `read_only` and `hint` (`mcp/server.py:197-201`). Wanted: a
+cookie inventory in the shape the Indeed MCP reports (`count`, `hosts`, `file_age_h`,
+`soonest_expiry_days`, `markers_missing`).
+
+**The design partially refuses the request, on evidence — read §1 before implementing:**
+`soonest_expiry_days` and `hosts` have **no data source** in this repo, because both cookie
+producers keep only `{name: value}` and discard `expires` and `domain`
+(`lib/cookies_extract.py:35`, `mcp/lib/session_browser.py:142-143`). They must be reported as
+`null` **with the reason**, never as a number. And `li_at` is **not** a JWT
+(`01-AUTH-AND-COOKIES.md:10`), so nothing is derivable from it either. The mtime of
+`/tmp/li_cookies.json` is **not** session age — `mcp/session_daemon.py:43` rewrites the file on a
+cycle — so the field has to be called `cookie_file_age_h`.
+
+**Buildable today:** `count`, `markers_missing` (`li_at` + `JSESSIONID`), `cookie_file_age_h`, and
+whether `LI_OWNER_URN` is set (unset silently blocks **every** `delete_comment`, including the
+owner's own — `mcp/lib/client.py:38`, guard `:326`, `:328-334`).
+**Two prerequisites before any file-derived field:** unify the two cookie-path notions
+(`VG_COOKIES` vs. the unused `self.cookies_path`, §1.8) and make every reader accept **both**
+payload shapes — `lib/vgreq.py:11-15` reads the flat dict and breaks on a list (§1.7).
+
+## ⏳ Error taxonomy with `session_suspect` — designed, NOT built
+
+**Status:** fully specified against the current tree, no code written (2026-07-31).
+**Design + evidence:** [`SESSION-AND-ERRORS-DESIGN.md`](SESSION-AND-ERRORS-DESIGN.md) §2, table L1–L13.
+
+Today `mcp/lib/client.py:72-76` collapses "no cookie file", "network/timeout", "missing marker" and
+a genuine auth failure into one `except Exception: return False`, which surfaces as
+`logged_in: false` — i.e. **as a session problem** in all four cases (`mcp/server.py:197-201`). That
+is the mechanism behind "every 403 means the session is dead".
+
+**The headline finding:** of every evidenced failure mode, **exactly one** is real session death —
+the **302 → `/uas/login`** (`05-VERIFICATION.md:91`, arriving as a 302 because
+`lib/vgreq.py:41,49,52` pass `allow_redirects=False`). The **403 is explicitly not** a session
+problem but a missing/malformed `csrf-token` (`01-AUTH-AND-COOKIES.md:13-14`).
+
+**Three things not to get wrong** (all in §2):
+- ⚠️ The content-type step must **not** be copied 1:1 from Indeed: Voyager answers
+  `application/vnd.linkedin.normalized+json+2.1` (`01-AUTH-AND-COOKIES.md:80`), so a naive
+  `"application/json" in ctype` would classify every successful Voyager response as non-JSON.
+- The most important class is the **GraphQL 200 carrying `data.errors`** — the status actively lies
+  (`04-WRITE-OPERATIONS.md:114-117`). Body signal is checked **before** status. (The missing checks
+  in `create_poll` / `delete_repost` are already tracked above — same class, separate fix.)
+- 🔒 **Redaction must be built with it, not after.** `grep -rn "redact\|scrub" mcp/ lib/ tools/` → 0
+  hits. Bodies must never enter a message (`status` / `endpoint` / `len(body)` only); if an excerpt
+  is needed, redact **then** truncate.
+
+Not to be re-admitted as facts: the vgreq-header cause of the SDUI 500 (unverified, contradicted —
+`COVERAGE-MAP.md:47-54`) and the `currentActor` cause (a red herring per
+`mcp/lib/client.py:409-410`); carry the latter as one causeless class "SDUI replay incomplete".
+
 ## Notes
 - The MCP is a pure API client: no browser, no clicking (refactor 01980e5). Session login/
   refresh is external (session_daemon.py keeps /tmp/li_cookies.json fresh).

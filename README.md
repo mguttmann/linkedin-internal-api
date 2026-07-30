@@ -205,6 +205,7 @@ settings, recommendations, quote-repost.
 | `docs/10` · `23` | Post interactions (like/save/repost) · Read & discovery endpoints |
 | `docs/24` · `25` | Advanced posts (edit/poll/media/mention) · Network & contact actions |
 | **[`docs/26-READ-ONLY-MODE.md`](docs/26-READ-ONLY-MODE.md)** | `LINKEDIN_READ_ONLY` — blocking every write for cron/agent use, and what it does not protect |
+| **[`docs/SESSION-AND-ERRORS-DESIGN.md`](docs/SESSION-AND-ERRORS-DESIGN.md)** | ⛔ **Design, NOT built** — session-age visibility and the L1–L13 error taxonomy with `session_suspect` (which failure really means "re-login" — exactly one does) |
 | `docs/BROWSERLESS-REPLAY.md` | The `states[]` finding in depth |
 | `docs/MCP-DESIGN.md` | Why the server is built the way it is |
 
