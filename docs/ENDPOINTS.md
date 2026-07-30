@@ -22,7 +22,7 @@ the patchright session (SDUI currentActor binding).
 | Unlike | SDUI | `com.linkedin.sdui.reactions.delete` | ⚠️ 500 (browser) | 04 |
 | Create post | Voyager GQL | `graphql?action=execute&queryId=voyagerContentcreationDashShares.<hash>` | ✅ 200 | 04 |
 | Edit post | Voyager GQL | `voyagerContentcreationDashShares.<hash>` + `resourceKey`/`updateUrn` | ✅ 200 | 24 |
-| Delete post | SDUI | `com.linkedin.sdui.update.deletePost` (activityId + trackingId) | ✅ (browser-capture) | 04 |
+| Delete post | SDUI | `com.linkedin.sdui.update.deletePost` (activityId + trackingId) | 🔍 schema captured (browser-capture); **browserless not proven** ³ | 04 |
 | Poll | Voyager GQL | `voyagerFeedDashPollsPollSummary.<hash>` → `Shares` `media.mediaUrn` | ✅ 200 | 24 |
 | Post media (image/video) | Voyager | `POST voyagerVideoDashMediaUploadMetadata?action=upload` → PUT → `Shares` | ✅ captured | 24 |
 | @mention in post | Voyager | `commentary.attributesV2.profileMention` (+ start/length) | ✅ | 24 |
@@ -33,15 +33,30 @@ the patchright session (SDUI currentActor binding).
 | Delete comment | Voyager | `DELETE feed/comments/{url-enc urn:li:comment:(activity:<post>,<id>)}` | ✅ 204 (browserless) | 07 |
 | React to comment | SDUI | `com.linkedin.sdui.reactions.create` (commentThreadUrn) | ⚠️ (browser) | 25 |
 | Repost / instant repost | SDUI | `com.linkedin.sdui.feed.requests.createInstantRepost` | ⚠️ 500 (browser) | 10 |
-| Delete repost | Voyager GQL | `voyagerFeedDashReposts` (delete-by-key) | ✅ | 10 |
+| Delete repost | Voyager GQL | `voyagerFeedDashReposts.<hash>` (delete-by-key) | 🔍 browser-capture; MCP tool **not operational** ⁴ | 10 |
 | Save / unsave post | SDUI | `com.linkedin.sdui.update.saveState` (`isSaved` toggle) | ✅ 200 | 10 |
 
-### Messaging (Voyager; sends/recall/react are browserless-friendly)
+³ **Delete post — corrected 2026-07-30.** This row and `COVERAGE-MAP.md` used to disagree
+(`✅ (browser-capture)` here vs. `✅ MCP delete_post (browserless)` there). Resolved against the
+evidence: the SDUI inventory entry for `com.linkedin.sdui.update.deletePost`
+(`data/endpoints_sdui.json`) has `url_sample: ""` and `postData: null` — **no captured body, hence
+no `trackingId` sample**, and no documented browserless replay with an HTTP status. Both files now
+say: schema captured, **browserless not proven**. The open questions (which read yields a
+`trackingId`, and whether it must match a server value at all) are in `BACKLOG.md`.
+
+⁴ **Delete repost — corrected 2026-07-30.** The endpoint is real (browser capture,
+`10-POST-INTERACTIONS.md`), but the MCP tool cannot work today: `_REPOST_DEL_QID` is the bare
+family name `"voyagerFeedDashReposts"` **without a hash** (`mcp/lib/client.py:742`, used in URL
+`:749` and body `:751`), while every GraphQL `queryId` needs `<queryName>.<hash>`
+(`02-VOYAGER-API.md:5`). Second gap: no read in this repo maps a repost to
+`(urn:li:share:<shareId>,<repostId>)`. See `BACKLOG.md`.
+
+### Messaging (Voyager; send/recall are browserless-verified, react is not)
 | Action | Endpoint | Doc |
 |---|---|---|
 | Send message | `POST voyagerMessagingDashMessengerMessages?action=createMessage` (originToken idempotency; `trackingId` = 16 raw bytes latin-1, `dedupeByClientGeneratedToken:false`) | 06 |
 | Recall (delete) message | `POST voyagerMessagingDashMessengerMessages?action=recall` (→ 204) | 06 |
-| React with emoji | `POST voyagerMessagingDashMessengerMessages?action=reactWithEmoji` (implemented, not live-tested) | 06 |
+| React with emoji | `POST voyagerMessagingDashMessengerMessages?action=reactWithEmoji` (Voyager REST, **not** SDUI; implemented, first live observation = **HTTP 500**, cause open — `BACKLOG.md`) | 06 |
 | Mark conversation read | `POST voyagerMessagingDashMessengerConversations?ids=List(...)` `patch.$set.read` | 06 |
 | List conversations | `GET voyagerMessagingGraphQL/graphql messengerConversations.<hash>?variables=(mailboxUrn:{ME})` | 06 |
 

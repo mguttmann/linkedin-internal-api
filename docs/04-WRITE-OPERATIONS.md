@@ -327,7 +327,7 @@ the field → click save (`.click()`) → capture the save request. See
 | **@mention** | — | `commentary.attributesV2.profileMention` | ✅ verified (docs/24) |
 | **Media (image/video)** | Voyager | `MediaUploadMetadata` → PUT → `Shares` asset | ✅ captured (docs/24) |
 | **Save/unsave post** | SDUI | `com.linkedin.sdui.update.saveState` | ✅ verified browserless |
-| **Repost / delete repost** | SDUI / Voyager | `createInstantRepost` / `voyagerFeedDashReposts` | ✅ verified |
+| **Repost / delete repost** | SDUI / Voyager | `createInstantRepost` / `voyagerFeedDashReposts` | repost: ✅ verified (browser only) · delete repost: 🔍 endpoint captured, MCP tool **not operational** — see `STATUS-MATRIX.md` note 4 |
 | **Send / recall / react DM** | Voyager | `messengerMessages?action=…` | ✅ verified browserless (docs/06) |
 | **Connect / endorse / remove connection** | Voyager+SDUI | see docs/25 | ✅ verified |
 | **Contact-info save** | SDUI | `saveProfileContactInfoForm` | ✅ captured (docs/25) |

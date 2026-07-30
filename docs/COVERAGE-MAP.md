@@ -12,16 +12,21 @@
 
 **130 distinct endpoints** (141 raw captures) mapped. The write surface is now broad and, for the everyday actions,
 **verified live**. Shipped as an **MCP server** — see `../mcp/`. Reads and writes run **browserless**
-through pure `requests`; comment/reaction SDUI writes replay a captured full body with minimal headers.
+through pure `requests`; SDUI writes replay a **captured full body**. Header note: `unlike` and
+`react_to_comment` go through `_sdui_min_headers()`, while `create_comment` posts the same kind of
+SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live 200 — so
+"minimal headers" is not a proven requirement of the SDUI route (see "Key finding" below).
 
 **MCP tools:**
 - *Reads (browserless):* `get_me`, `get_my_posts`, `get_profile`, `get_notifications`,
   `get_conversations`, `get_connections_summary`, `get_post_comments`, `get_link_preview`
 - *Posts:* `create_post` (+poll_urn), `edit_post`, `delete_post`, `create_poll`, `save_post`,
-  `repost`, `delete_repost` (repost create browserless 200; repost delete via browser)
+  `repost`, `delete_repost` (repost create browserless 200; repost delete captured via browser
+  only — the `delete_repost` tool is **not operational**, see §1)
 - *Engagement:* `like` (browserless 201), `unlike` (browserless 200), `create_comment`,
   `delete_comment` (all browserless)
-- *Messaging (browserless live):* `send_dm`, `recall_message`, `react_to_message`
+- *Messaging:* `send_dm` (browserless live), `recall_message` (browserless 204 live),
+  `react_to_message` (implemented; first live observation was a 500 — not working today)
 - *Network:* `follow_company`, `connect`, `endorse_skill` (browserless 200), `remove_connection`
 - *Session:* `session_status` (also reports `read_only`), `refresh_session`
 
@@ -30,11 +35,34 @@ through pure `requests`; comment/reaction SDUI writes replay a captured full bod
 — the recommended default for cron / unattended agents. Offline-proven, not yet live-tested; scope
 and honest limit in `26-READ-ONLY-MODE.md`.
 
-**Key finding:** SDUI writes are ALL browserless-replayable — the earlier `currentActor` "needs a
-browser" story was a red herring (that field is empty in the real browser request too). Two things
-mattered: (1) replay the **full captured body** verbatim (hand-built partial bodies 500), and
-(2) send **minimal headers** (csrf + cookies + content-type) — vgreq's Voyager `accept`/`x-restli`
-headers make the SDUI route 500. Proven live for `unlike` and `create_comment`.
+**Key finding:** SDUI writes are browserless-replayable — the earlier `currentActor` "needs a
+browser" story was a red herring (that field is empty in the real browser request too; see
+`mcp/lib/client.py:409-410`).
+
+**What is actually proven, and what is not** (corrected 2026-07-30 — the previous wording claimed
+more than the evidence carries):
+
+- **Proven factor — the body.** Replay the **full captured body** verbatim; hand-built partial
+  bodies 500. Evidence: `mcp/lib/client.py:393-394` and the `unlike` fix note `:406-412`.
+- **Unproven factor — the headers.** The claim "vgreq's Voyager `accept`/`x-restli` headers make
+  the SDUI route 500" is **not verified** and is **contradicted for `comments.createComment`** by
+  this repo's own code: `create_comment_browserless` posts the SDUI route
+  (`_SDUI_COMMENT_URL`, `mcp/lib/client.py:161-162`, used at `:215`) through
+  `self._vg().post(url, body, is_json=False)` (`mcp/lib/client.py:242`) — i.e. **with** the
+  Voyager headers, **not** via `_sdui_min_headers()` — and that path is documented as live 200
+  (`mcp/lib/client.py:159-160`, `:191`). So vgreq headers on an SDUI route do not by themselves
+  produce a 500.
+- **Why the old claim looked proven:** the `unlike` fix changed **body and headers at the same
+  time** (`mcp/lib/client.py:409-412` names both (a) and (b)). That is a confounded A+B fix; only
+  the body factor is isolated. The same unproven causality is still asserted in the
+  `_sdui_min_headers` docstring (`mcp/lib/client.py:377-381`) — see `BACKLOG.md`.
+- **The one-variable test that would settle it** (nothing else will): fire the *same* existing
+  `unlike_sdui.json.tpl` body twice against the *same own* post — run A through
+  `_post_sdui_template()` (minimal headers, `mcp/lib/client.py:390-404`), run B through
+  `self._vg().post(url, body, is_json=False)` — and record both HTTP statuses. Reversible
+  (like/unlike only), own account only. Until then the header contribution is **unknown**, and
+  `03-SDUI-API.md:51-64` (ten "required" SDUI headers) vs. the three that `_sdui_min_headers()`
+  sends (`mcp/lib/client.py:387-388`) also stays unresolved.
 
 ---
 
@@ -44,14 +72,14 @@ headers make the SDUI route 500. Proven live for `unlike` and `create_comment`.
 | Read own/others posts | `graphql voyagerFeedDashProfileUpdates` | 🔍 |
 | Read main feed | `graphql voyagerFeedDashMainFeed` / SDUI `pagers.feed.mainFeed` | 🔍 |
 | Create post (text) | `graphql voyagerContentcreationDashShares` | ✅ MCP `create_post` (browserless live) |
-| Delete post | SDUI `com.linkedin.sdui.update.deletePost` | ✅ MCP `delete_post` (browserless) |
+| Delete post | SDUI `com.linkedin.sdui.update.deletePost` | 🔍 schema captured (browser-capture); **browserless not proven** — see `ENDPOINTS.md` + `BACKLOG.md` |
 | Post with **image/video/document** | Voyager `MediaUploadMetadata`→PUT→`Shares` asset | ✅ captured (docs/24) |
 | Post with **@mention** of a person | `commentary.attributesV2.profileMention` | ✅ verified (docs/24) |
 | Post with **link preview** | `voyagerContentcreationDashUpdateUrlPreview` | ✅ MCP `get_link_preview` (browserless 200) |
 | Post **poll** | `PollsPollSummary`→`Shares` URN_REFERENCE | ✅ MCP `create_poll` + `create_post(poll_urn)` (browserless live) |
 | Edit an existing post | `Shares` + `resourceKey`/`updateUrn` | ✅ MCP `edit_post` (browserless live) |
 | **Repost** (instant) | SDUI `feed.requests.createInstantRepost` | ✅ MCP `repost` (browser-only, 500 headless) |
-| Delete repost | Voyager `graphql voyagerFeedDashReposts` (delete-by-key) | ✅ MCP `delete_repost` |
+| Delete repost | Voyager `graphql voyagerFeedDashReposts` (delete-by-key) | 🔍 endpoint captured **via browser**; MCP `delete_repost` is **not operational** (queryId carries no hash — `mcp/lib/client.py:742`) + no read maps repost→share. `BACKLOG.md` |
 | Quote repost (with thoughts) | `voyagerContentcreationDashShares` + reshare ref | ⏳ |
 | **Save / unsave** post | SDUI `update.saveState` `{isSaved}` | ✅ MCP `save_post` (browserless live) |
 | Report post | ? (blocklisted in crawler) | ❌ |
@@ -74,7 +102,7 @@ headers make the SDUI route 500. Proven live for `unlike` and `create_comment`.
 | Create comment | SDUI `comments.createComment` | ✅ |
 | Delete comment | SDUI `comments.deleteComment` | ✅ |
 | **Edit** comment | SDUI `comments.updateComment` | ✅ |
-| **Reply** to a comment (nested) | SDUI `comments.createComment` (parent ref) | ✅ |
+| **Reply** to a comment (nested) | SDUI `comments.createComment` (parent ref — **field name unknown**) | 🔍 captured in the UI / 🔩 inferred — **not implemented, not verified**; no `reply_to_comment` tool exists. `BACKLOG.md` + `07-COMMENTS.md` |
 | **Like/react** to a comment | SDUI `reactions.create` (commentThreadUrn) | ✅ |
 | **Unreact** to a comment | SDUI `reactions.delete` | ✅ |
 | Comment with **@mention** | `commentary.attributesV2.profileMention` (same as posts) | ✅ pattern (docs/24) |
@@ -89,7 +117,7 @@ headers make the SDUI route 500. Proven live for `unlike` and `create_comment`.
 | **Send** a message | `messengerMessages?action=createMessage` | ✅ MCP `send_dm` (browserless live; needs raw-bytes trackingId) |
 | **Edit** a sent message | `messengerMessages/<urn>` patch body | ✅ |
 | **Delete** a message | `messengerMessages?action=recall` | ✅ MCP `recall_message` (browserless 204 live) |
-| **React** to a message (emoji) | `messengerMessages?action=reactWithEmoji` | ✅ MCP `react_to_message` |
+| **React** to a message (emoji) | Voyager REST `messengerMessages?action=reactWithEmoji` | 🔩 MCP `react_to_message` implemented, **first live observation = HTTP 500** (2026-07-30, owner-reported); cause open — `06-MESSAGING.md` + `BACKLOG.md` |
 | Mark conversation read/unread | `messengerConversations` patch read | ✅ |
 | **Typing** indicator | `messengerConversations?action=typing` | ✅ |
 | **Reply** to a message (quote) | button exists, schema pending | ⏳ |
@@ -169,7 +197,7 @@ headers make the SDUI route 500. Proven live for `unlike` and `create_comment`.
 | Read job posting detail | `voyagerJobsDashJobPostingDetailSections` | 🔍 |
 | **Save / unsave** a job | ? | ❌ |
 | **Apply** to a job (Easy Apply) | `voyagerJobsDashOnsiteApplyApplication` seen | ❌ write |
-| Set job **alerts / preferences** | `voyagerJobsDashJobSeekerPreferences` | 🔍 |
+| Set job **alerts / preferences** | `voyagerJobsDashJobSeekerPreferences` | 🔍 read verified; **write not buildable on current evidence** — open items [O-1]…[O-4] in `22-OPEN-TO-WORK.md` (the only documented write path switches the recruiter signal ON; `minimumPay` is ABSENT repo-wide) |
 | Post a job | `voyagerJobsDashJobPostings` POST seen | ❌ verify |
 
 ## 10. Companies / Organizations

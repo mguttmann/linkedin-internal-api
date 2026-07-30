@@ -1,8 +1,8 @@
 # 07 — Comments (verified)
 
-Complete comment surface, captured live and verified on the owner's own post
-(test comment/reply created and deleted; profile left clean). Comments are a **mixed world**:
-reading is Voyager, writing is **SDUI**.
+Comment surface captured live on the owner's own post (test comment created and deleted; profile
+left clean). Comments are a **mixed world**: reading is Voyager, writing is **SDUI**.
+Read, create (top-level) and delete are verified; **reply is not** — see the reply section below.
 
 Post URN used in examples: `urn:li:activity:<postId>`. Comment URN form:
 `urn:li:fsd_comment:(<commentId>,urn:li:activity:<postId>)`.
@@ -42,16 +42,38 @@ Body: {
 
 ---
 
-## ✅ Reply to a comment (nested)
+## 🔍/🔩 Reply to a comment (nested) — NOT implemented, NOT verified
 
-Same endpoint `com.linkedin.sdui.comments.createComment`, **but the payload carries a
-parent-comment reference** (the reply targets the parent comment's thread instead of the
-post's activity thread). Preceded by a `component?componentId=…comments…` call that fetches
-the reply box state.
-**Verified:** reply appeared nested under the parent. ✅
+**Downgraded 2026-07-30.** This section used to carry a `✅` and "Verified: reply appeared nested
+under the parent". Per the repo's own rule (`05-VERIFICATION.md`), a `✅` requires an HTTP status
+**and** a path (browser / browserless); neither was ever recorded here. What actually holds:
 
-> **Key difference:** top-level comment → `threadUrnActivityThreadUrn` (post). Reply →
-> parent comment thread in the collection/threadUrn. Both use `createComment`.
+- 🔍 **Captured / observed in the UI:** a reply *was* posted manually and appeared nested. That is
+  a UI observation of a manual session, not a replayed request.
+- 🔩 **Inferred:** that the same endpoint `com.linkedin.sdui.comments.createComment` is used and
+  that the payload carries a parent-comment reference — the reply targeting the parent comment's
+  thread instead of the post's activity thread. The `component?componentId=…comments…` call that
+  fetches the reply-box state was seen alongside it.
+- ⚠️ **The field name is unknown.** `BACKLOG.md` names a `parentComment` binding, but **no capture
+  covers that name** — the same backlog entry states the existing capture contains "no
+  parent-comment reference at all". Treat `parentComment` as a **guessed name**, not a schema fact,
+  and do not send it.
+- ❌ **Not implemented:** there is no `reply_to_comment` MCP tool, no client method and no test. The
+  usable request body does not exist in this repo (`data/endpoints_sdui.json` knows only
+  `comments.createComment` and `comments.deleteComment`, both with an empty `url_sample` and
+  `postData: null`).
+- Consistent with this, `BROWSERLESS-REPLAY.md` marks "Comment create/reply/edit/delete" as
+  🔬 replay-untested.
+
+**Next step:** the concrete capture recipe (which script, which UI action, what to diff against,
+and the cleanup order) lives in `BACKLOG.md` → "reply_to_comment".
+
+> **Inferred key difference (not a verified schema):** top-level comment →
+> `threadUrnActivityThreadUrn` (post). A reply is expected to point at the parent comment thread in
+> `collection/threadUrn`. The shape `threadUrnCommentThreadUrn` *does* exist as a live-200 template
+> — but for `reactions.create`, not for `createComment`
+> (`mcp/lib/templates/react_comment_sdui.json.tpl`, `mcp/lib/client.py:425-436`). Reusing it for
+> replies is a guess until a capture shows it.
 
 ---
 

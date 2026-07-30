@@ -72,7 +72,10 @@ Body: {
 ```
 - This is a GraphQL **DELETE-by-key** (the `resourceKey` is the repost URN).
 - UI: your repost → "…" → **"Repost löschen"** → confirm.
-- **Verified:** repost removed. ✅
+- **Verified:** repost removed. ✅ — but note this was verified **in the browser**. The MCP tool
+  `delete_repost` is **not operational**: its `queryId` carries no `.<hash>`
+  (`mcp/lib/client.py:742`), and no captured read maps a repost to its share. See
+  `STATUS-MATRIX.md` note 4 and `BACKLOG.md`.
 - **Mixed world:** create repost = SDUI (`createInstantRepost`), delete repost = Voyager
   GraphQL (`voyagerFeedDashReposts`).
 

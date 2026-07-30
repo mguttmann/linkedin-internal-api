@@ -50,17 +50,18 @@ verified live. See `04-WRITE-OPERATIONS.md` for full request/body schemas.
 | **Unlike / remove reaction** | SDUI | `com.linkedin.sdui.reactions.delete` | ✅ verified (browserless — captured-body template + minimal headers) |
 | **Create post** | Voyager | `graphql voyagerContentcreationDashShares` | ✅ verified (browserless) |
 | **Edit post** | Voyager | `graphql voyagerContentcreationDashShares` + `resourceKey`/`updateUrn` | ✅ verified (browserless, docs/24) |
-| **Delete post** | SDUI | `com.linkedin.sdui.update.deletePost` | ✅ verified |
+| **Delete post** | SDUI | `com.linkedin.sdui.update.deletePost` | 🔍 schema captured (browser); browserless **not proven** ³ |
 | **Poll** | Voyager | `PollsPollSummary` → `Shares` `media.mediaUrn` (URN_REFERENCE) | ✅ verified (browserless, docs/24) |
 | **Post media (image/video)** | Voyager | `MediaUploadMetadata?action=upload` → PUT → `Shares` asset | ✅ captured (docs/24) |
 | **@mention in post** | Voyager | `commentary.attributesV2.profileMention` | ✅ verified (docs/24) |
 | **Link preview** | Voyager | `graphql voyagerContentcreationDashUpdateUrlPreview` | ✅ verified (browserless, GET) |
 | **Save / unsave post** | SDUI | `com.linkedin.sdui.update.saveState` (`isSaved` toggle) | ✅ verified (browserless) |
-| **Repost / delete repost** | SDUI / Voyager | `createInstantRepost` / `graphql voyagerFeedDashReposts` | ✅ verified (repost = browser only) |
+| **Repost / delete repost** | SDUI / Voyager | `createInstantRepost` / `graphql voyagerFeedDashReposts.<hash>` | repost: ✅ verified (browser only) · delete repost: 🔍 endpoint captured, MCP tool **not operational** ⁴ |
 | **Create comment** | SDUI | `com.linkedin.sdui.comments.createComment` | ✅ verified |
 | **Delete comment** | Voyager | `DELETE feed/comments/{url-enc urn:li:comment:(activity,<id>)}` | ✅ verified (browserless, 204) |
 | **React to comment** | SDUI | `reactions.create` (commentThreadUrn) | 🟡 captured (browser) |
-| **Send DM / recall / react** | Voyager | `voyagerMessagingDashMessengerMessages?action=…` | ✅ verified (browserless) ² |
+| **Send DM / recall** | Voyager | `voyagerMessagingDashMessengerMessages?action=createMessage` / `?action=recall` | ✅ verified (browserless) ² |
+| **React to a message** | Voyager REST | `voyagerMessagingDashMessengerMessages?action=reactWithEmoji` | 🔩 implemented; first live observation = **HTTP 500** ² |
 | **Follow / unfollow company** | Voyager | `feed/dash/followingStates/{urn}` PARTIAL_UPDATE | ✅ 201/200 (browserless) |
 | **Follow person** | SDUI | `addaUpdateFollowState` | ✅ verified |
 | **Connect (with note)** | Voyager | `voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2` + `customMessage` | ✅ verified (docs/25) |
@@ -83,8 +84,33 @@ array, so a create can be replayed from pure `requests` (HTTP 200). See `BROWSER
 ² Messaging note: reads use the dedicated `voyagerMessagingGraphQL/graphql` path
 (`get_conversations`), sends use `voyagerMessagingDashMessengerMessages?action=createMessage` —
 the body needs `trackingId` (16 RAW bytes as a latin-1 string, **not** base64) plus
-`dedupeByClientGeneratedToken:false`. `recall_message` returns 204. `react_to_message` is
-implemented (schema known) but not yet live-tested.
+`dedupeByClientGeneratedToken:false`. `recall_message` returns 204.
+**`react_to_message` — updated 2026-07-30:** it was listed here as "implemented (schema known) but
+not yet live-tested". It has now been run once by the owner and returned **HTTP 500** — that is the
+**first live observation of this route at all**, so it does not contradict the earlier wording, it
+fills it in. Two things follow. (a) The route is **Voyager REST**, not SDUI:
+`mcp/lib/client.py:574-581` builds
+`{BASE}/voyagerMessagingDashMessengerMessages?action=reactWithEmoji` and posts
+`{"messageUrn", "emoji"}` through `self._vg()`; `06-MESSAGING.md:5` says all messaging runs over
+Voyager REST.li. There is **no captured SDUI body** for message reactions
+(`data/endpoints_sdui.json` has none; `mcp/lib/templates/` holds exactly three templates — unlike,
+react_comment, create_comment — and no messaging template). The otherwise-good "captured SDUI
+template + minimal headers" recipe therefore **does not apply here**, and minimal headers would be
+a regression on a Voyager route (every verified Voyager write runs with vgreq's headers: `like`
+201, `send_dm` 200, `recall_message` 204). (b) The **cause is open**. Candidates, ranked by
+evidence strength, in `BACKLOG.md`.
+Also note the docstring `mcp/lib/client.py:575` still says "VERIFIED" for this method — a doc
+defect tracked in `BACKLOG.md`, not fixed here (doc-only ticket).
+
+³ **Delete post — corrected 2026-07-30.** `ENDPOINTS.md` said `✅ (browser-capture)` while
+`COVERAGE-MAP.md` said `✅ MCP delete_post (browserless)`; both cannot hold. Resolved against the
+evidence: `data/endpoints_sdui.json` carries the `update.deletePost` family with `url_sample: ""`
+and `postData: null` — no captured body, no `trackingId` sample — and no browserless run with a
+documented HTTP status exists. All three files now say **schema captured, browserless not proven**.
+
+⁴ **Delete repost — corrected 2026-07-30.** Endpoint real (browser capture), MCP tool not runnable:
+`_REPOST_DEL_QID = "voyagerFeedDashReposts"` has **no hash** (`mcp/lib/client.py:742`), and no read
+in this repo maps a repost to `(urn:li:share:<shareId>,<repostId>)`. Details in `BACKLOG.md`.
 
 ## Important corrections (paths that do NOT work)
 
