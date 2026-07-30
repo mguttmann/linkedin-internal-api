@@ -6,6 +6,7 @@ Run:  python server.py           (stdio, for Claude Desktop / Cursor / Hermes)
 Tools are thin wrappers over LinkedInClient — a PURE requests-based API client. No browser,
 no clicking. Reads and writes are wired, each backed by a live-captured request body.
 People-facing and destructive tools require confirm=True (guardrail, see docs/MCP-DESIGN.md §5).
+Setting LINKEDIN_READ_ONLY blocks every writing tool outright (read-only mode, see below).
 
 Nothing connects at import time. Session login/refresh is handled OUTSIDE the MCP by
 session_daemon.py, which keeps /tmp/li_cookies.json fresh.
@@ -13,14 +14,85 @@ session_daemon.py, which keeps /tmp/li_cookies.json fresh.
 
 from __future__ import annotations
 
+import functools
+import inspect
+import os
 import sys
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 
 from lib.client import LinkedInClient
 
 mcp = FastMCP("linkedin 🔗")
 li = LinkedInClient()
+
+
+# ── Read-only mode (operational guardrail, see docs/MCP-DESIGN.md §5) ────
+# LINKEDIN_READ_ONLY only ever switches writes OFF — it never grants anything. Off means:
+# unset, empty, "0" or "false" (case-insensitive). ANY other value means ON; an unrecognised
+# value warns on stderr and still counts as ON, so a typo (=ja/yes/on/2) can never hand out
+# write access by accident.
+_READ_ONLY_OFF = {"0", "false"}
+_READ_ONLY_ON = {"1", "true", "yes", "on"}
+_read_only_warned: set[str] = set()
+
+
+def read_only_enabled() -> bool:
+    """True while LINKEDIN_READ_ONLY blocks the writing tools. Read from os.environ on EVERY
+    call — never cached at import time, so a long-lived server and tests can change the mode.
+
+    HONEST LIMIT: read-only is an operating mode of THIS MCP SERVER, not a library guarantee.
+    It gates the @mcp.tool functions in this file. Code that imports LinkedInClient directly
+    (mcp/tests, tools/*.py) bypasses it — that path is not protected by this flag.
+    """
+    raw = (os.environ.get("LINKEDIN_READ_ONLY") or "").strip()
+    if not raw or raw.lower() in _READ_ONLY_OFF:
+        return False
+    if raw.lower() not in _READ_ONLY_ON and raw not in _read_only_warned:
+        _read_only_warned.add(raw)
+        print(f"[linkedin-mcp] LINKEDIN_READ_ONLY={raw!r} is not a recognised value — treating "
+              "it as ON (all writing tools blocked).", file=sys.stderr)
+    return True
+
+
+def write_tool(fn=None, *, network_free_param: str | None = None):
+    """Mark a tool as WRITING and hard-block it while read-only mode is on.
+
+    Blocking raises ToolError — loudly. It must never return {"ok": False, ...} (that is what a
+    failed real call looks like, mcp/lib/client.py:344-350, and a caller would retry) and never
+    {"ok": True, ...} (a gate that fakes success is worse than no gate).
+
+    network_free_param names a parameter of THIS tool that selects a path explicitly audited as
+    network-free (an opt-in whitelist — the gate never trusts a parameter *name* on its own).
+    When it is truthy the call is allowed under read-only and its result carries read_only=True,
+    so a caller cannot mistake it for "a later dry_run=False would work too".
+    """
+    def deco(f):
+        sig = inspect.signature(f)
+
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if read_only_enabled():
+                if network_free_param is not None:
+                    bound = sig.bind_partial(*args, **kwargs)
+                    bound.apply_defaults()
+                    if bound.arguments.get(network_free_param):
+                        out = f(*args, **kwargs)
+                        if isinstance(out, dict):
+                            out["read_only"] = True
+                        return out
+                raise ToolError(
+                    f"{f.__name__} is blocked: this MCP server runs in READ-ONLY mode because "
+                    "LINKEDIN_READ_ONLY is set. This is intentional (agent/cron safety), not a "
+                    "transient failure — do not retry. Unset LINKEDIN_READ_ONLY (or set it to 0) "
+                    "to allow writing tools again.")
+            return f(*args, **kwargs)
+
+        wrapper.__li_write__ = True
+        return wrapper
+
+    return deco if fn is None else deco(fn)
 
 
 # ── Reads (browserless, wired) ───────────────────────────────────────────
@@ -76,6 +148,7 @@ def get_post_comments(activity_urn: str) -> dict:
 
 
 @mcp.tool
+@write_tool
 def create_comment(activity_urn: str, text: str, confirm: bool = False) -> dict:
     """Post a top-level comment on a post (activity_urn = urn:li:activity:<id>, or a bare id).
     People-facing → requires confirm=True. Returns status + the new comment URN when resolvable.
@@ -87,6 +160,7 @@ def create_comment(activity_urn: str, text: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool
+@write_tool(network_free_param="dry_run")
 def delete_comment(comment_id: str, activity_urn: str, confirm: bool = False,
                    dry_run: bool = False, force: bool = False) -> dict:
     """Delete a comment. comment_id = the numeric comment id; activity_urn = the post it's on
@@ -116,9 +190,13 @@ def get_link_preview(url: str) -> dict:
 
 @mcp.tool
 def session_status() -> dict:
-    """Check whether the LinkedIn session is live (a /me probe). Pure API, no browser."""
+    """Check whether the LinkedIn session is live (a /me probe). Pure API, no browser.
+
+    read_only mirrors LINKEDIN_READ_ONLY: when true, every writing tool is blocked (it raises) —
+    check this instead of probing the mode with a write."""
     ok = li.ensure_session()
     return {"logged_in": ok,
+            "read_only": read_only_enabled(),
             "hint": None if ok else ("session cookies are stale — the external session_daemon.py "
                                      "refreshes /tmp/li_cookies.json; (re)start it to log in")}
 
@@ -136,6 +214,7 @@ def refresh_session() -> dict:
 
 # ── Engagement writes (verified endpoints, live-captured bodies) ─────────
 @mcp.tool
+@write_tool
 def like(activity_urn: str) -> dict:
     """Like a post by its activity URN (e.g. urn:li:activity:123…). Verified endpoint."""
     li.ensure_session()
@@ -143,6 +222,7 @@ def like(activity_urn: str) -> dict:
 
 
 @mcp.tool
+@write_tool
 def unlike(activity_urn: str) -> dict:
     """Remove your LIKE reaction from a post by its activity URN. Verified endpoint."""
     li.ensure_session()
@@ -150,6 +230,7 @@ def unlike(activity_urn: str) -> dict:
 
 
 @mcp.tool
+@write_tool
 def follow_company(company_id: str, follow: bool = True) -> dict:
     """Follow (follow=True) or unfollow (follow=False) a company by its numeric id.
     Browserless, verified endpoint."""
@@ -158,6 +239,7 @@ def follow_company(company_id: str, follow: bool = True) -> dict:
 
 
 @mcp.tool
+@write_tool
 def connect(member_urn: str, note: str = "", confirm: bool = False) -> dict:
     """Send a connection invite (optionally with a note) to a person by profile URN.
     People-facing → requires confirm=True."""
@@ -168,6 +250,7 @@ def connect(member_urn: str, note: str = "", confirm: bool = False) -> dict:
 
 
 @mcp.tool
+@write_tool
 def endorse_skill(vanity_name: str, profile_id: str, skill_id: str) -> dict:
     """Endorse a skill on someone's profile. vanity_name+profile_id identify the person,
     skill_id is the skill's position id. Browserless, verified."""
@@ -176,6 +259,7 @@ def endorse_skill(vanity_name: str, profile_id: str, skill_id: str) -> dict:
 
 
 @mcp.tool
+@write_tool
 def remove_connection(vanity_name: str, first_name: str = "", last_name: str = "",
                       confirm: bool = False) -> dict:
     """Remove a first-degree connection by vanity name. Destructive → requires confirm=True."""
@@ -186,6 +270,7 @@ def remove_connection(vanity_name: str, first_name: str = "", last_name: str = "
 
 
 @mcp.tool
+@write_tool
 def save_post(activity_id: str, save: bool = True) -> dict:
     """Save (save=True) or unsave (save=False) a post for later, by its numeric activity id.
     Browserless, verified."""
@@ -194,6 +279,7 @@ def save_post(activity_id: str, save: bool = True) -> dict:
 
 
 @mcp.tool
+@write_tool
 def repost(activity_id: str, confirm: bool = False) -> dict:
     """Instant-repost a post to the owner's feed. People-facing → requires confirm=True.
     Pure API (SDUI createInstantRepost). If it 500s, re-capture the full body as a template."""
@@ -204,6 +290,7 @@ def repost(activity_id: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool
+@write_tool
 def delete_repost(repost_urn: str, confirm: bool = False) -> dict:
     """Delete one of the owner's reposts by its repost URN. Destructive → requires confirm=True."""
     if not confirm:
@@ -213,6 +300,7 @@ def delete_repost(repost_urn: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool
+@write_tool
 def create_post(text: str, visibility: str = "PUBLIC", poll_urn: str = "",
                 confirm: bool = False) -> dict:
     """Publish a post on the owner's LinkedIn. Optionally attach a poll via poll_urn (from
@@ -224,6 +312,7 @@ def create_post(text: str, visibility: str = "PUBLIC", poll_urn: str = "",
 
 
 @mcp.tool
+@write_tool
 def edit_post(activity_id: str, share_id: str, text: str, confirm: bool = False) -> dict:
     """Edit an existing post's text. Needs activity_id + share_id (from the post URN / get_my_posts).
     People-facing → requires confirm=True."""
@@ -234,6 +323,7 @@ def edit_post(activity_id: str, share_id: str, text: str, confirm: bool = False)
 
 
 @mcp.tool
+@write_tool
 def create_poll(question: str, options: list, duration: str = "ONE_WEEK") -> dict:
     """Create a poll (returns its pollSummary URN). options: 2–4 strings; duration:
     ONE_DAY/THREE_DAYS/ONE_WEEK/TWO_WEEKS. Pass the returned poll_urn to create_post to publish."""
@@ -242,6 +332,7 @@ def create_poll(question: str, options: list, duration: str = "ONE_WEEK") -> dic
 
 
 @mcp.tool
+@write_tool
 def delete_post(activity_id: str, tracking_id: str, confirm: bool = False) -> dict:
     """Delete one of the owner's posts. Needs the numeric activity_id + the update's tracking_id
     (both from get_my_posts). Destructive → requires confirm=True."""
@@ -252,6 +343,7 @@ def delete_post(activity_id: str, tracking_id: str, confirm: bool = False) -> di
 
 
 @mcp.tool
+@write_tool
 def send_dm(conversation_urn: str, text: str, confirm: bool = False) -> dict:
     """Send a direct message in an existing conversation. People-facing → requires confirm=True."""
     if not confirm:
@@ -261,6 +353,7 @@ def send_dm(conversation_urn: str, text: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool
+@write_tool
 def recall_message(message_urn: str, confirm: bool = False) -> dict:
     """Delete (recall) a message you sent, for everyone. Destructive → requires confirm=True."""
     if not confirm:
@@ -270,6 +363,7 @@ def recall_message(message_urn: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool
+@write_tool
 def react_to_message(message_urn: str, emoji: str = "👏") -> dict:
     """React to a message with an emoji (toggle: re-send the same emoji to remove it)."""
     li.ensure_session()
@@ -277,6 +371,7 @@ def react_to_message(message_urn: str, emoji: str = "👏") -> dict:
 
 
 @mcp.tool
+@write_tool
 def react_to_comment(comment_id: str, activity_urn: str, confirm: bool = False) -> dict:
     """Like a comment — browserless (SDUI reactions.create). comment_id = the numeric comment id;
     activity_urn = the post the comment is on (urn:li:activity:<id>). People-facing → confirm=True."""

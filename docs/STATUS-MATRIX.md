@@ -39,6 +39,11 @@ invasive, and every test artifact was removed afterwards (verified clean).
 All of the following were captured by driving the **real client** (click-and-record) and
 verified live. See `04-WRITE-OPERATIONS.md` for full request/body schemas.
 
+> Every write below is reachable through the MCP server only while read-only mode is **off**.
+> With `LINKEDIN_READ_ONLY` set, all writing tools raise instead of calling — see
+> `26-READ-ONLY-MODE.md` (offline-proven, not yet live-tested). The status column describes the
+> **endpoint**, not the operating mode.
+
 | Operation | World | Endpoint | Status |
 |---|---|---|---|
 | **Set like / reaction** | Voyager | `voyagerSocialDashReactions` POST | ✅ 201 (browserless) |

@@ -19,13 +19,17 @@ EXPECTED = {"get_me", "get_my_posts", "get_profile", "get_notifications",
             "connect", "endorse_skill", "remove_connection",
             "save_post", "repost", "delete_repost",
             "create_post", "delete_post", "edit_post", "create_poll",
-            "send_dm", "recall_message", "react_to_message"}
+            "send_dm", "recall_message", "react_to_message",
+            "create_comment", "delete_comment", "react_to_comment"}
 
 
 def test_tools_registered():
+    # exact match, not a subset: a tool added (or lost) must be an explicit decision here —
+    # test_readonly.py then forces the read/write split for it.
     tools = asyncio.run(server.mcp.list_tools())
     names = {t.name for t in tools}
-    assert EXPECTED <= names, f"missing tools: {EXPECTED - names}"
+    assert names == EXPECTED, \
+        f"missing tools: {EXPECTED - names}; unexpected tools: {names - EXPECTED}"
 
 
 def test_every_tool_has_a_description():
@@ -66,6 +70,9 @@ def test_no_browser_on_import():
 
 
 def main():
+    # Same env pin as mcp/tests/conftest.py (which pytest applies but this standalone runner
+    # does not see): an exported LINKEDIN_READ_ONLY must not decide whether this suite is green.
+    os.environ.pop("LINKEDIN_READ_ONLY", None)
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0
     for t in tests:
@@ -75,6 +82,8 @@ def main():
             passed += 1
         except AssertionError as e:
             print(f"  FAIL {t.__name__}: {e}")
+        except Exception as e:  # report, never abort the run with a traceback
+            print(f"  FAIL {t.__name__}: {type(e).__name__}: {e}")
     print(f"=== {passed}/{len(tests)} passed ===")
     return 0 if passed == len(tests) else 1
 

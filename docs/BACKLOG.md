@@ -29,6 +29,36 @@ comment, or the parent binding lives somewhere the capture didn't record.
 
 Until then, replies must be posted manually — the agent correctly declines to guess.
 
+## ⏳ Stale tool counts in the docs ("26 tools")
+
+**Status:** diagnosed, not fixed — foreign scope of the read-only ticket (2026-07-30).
+
+`README.md` (5×), `docs/MCP-DESIGN.md` (3×), `docs/00-OVERVIEW.md` and `mcp/README.md` still say
+**26 tools** (`grep -n '26 tools\|26 MCP tools\|26 @mcp.tool' README.md docs mcp/README.md`). The registry
+holds **29** (10 reads + 19 writes) — `create_comment`, `delete_comment` and `react_to_comment`
+were added later and never counted. Two tests now hold the exact set
+(`mcp/tests/test_server.py` `EXPECTED`, and the read/write split in `mcp/tests/test_readonly.py`),
+so the number is no longer guesswork.
+**To fix:** replace every occurrence (including the badge line and the mermaid label
+`26 @mcp.tool` in `README.md`) with the tested split, and re-check the per-domain tool lists in the
+same sections — they omit the three comment tools too.
+Same class: `mcp/README.md` states `test_client.py (19/19)`; that file now holds 31 tests.
+
+## ⏳ Seven writing tools have no `confirm` gate
+
+**Status:** observation, deliberately unchanged (2026-07-30) — needs an owner decision.
+
+`like`, `unlike`, `follow_company`, `endorse_skill`, `save_post`, `create_poll` and
+`react_to_message` fire a real write on the **first** call; the other twelve writes require
+`confirm=True`. `endorse_skill` is the sharpest case: it writes on a **third party's** profile.
+`LINKEDIN_READ_ONLY` now covers all seven in unattended operation, but with the flag off they are
+still one call away.
+**To decide:** whether these get `confirm=True` as well (changes the tool contract for every
+existing caller) or stay ungated by intent. Not a defect — a design decision.
+
 ## Notes
 - The MCP is a pure API client: no browser, no clicking (refactor 01980e5). Session login/
   refresh is external (session_daemon.py keeps /tmp/li_cookies.json fresh).
+- Read-only mode (`LINKEDIN_READ_ONLY`) is an operating mode of `mcp/server.py`, not a library
+  guarantee: `tools/*.py` and tests importing `LinkedInClient` directly are not covered by it.
+  Documented as such in `26-READ-ONLY-MODE.md` §7 — do not restate it more strongly elsewhere.

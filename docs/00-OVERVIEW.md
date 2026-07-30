@@ -70,3 +70,6 @@ read/write LinkedIn: reads (`get_me`, `get_my_posts`, `get_conversations`, …),
 (`like`, `unlike`), messaging (`send_dm`, `recall_message`, `react_to_message`), and network
 (`connect`, `endorse_skill`, `remove_connection`, `follow_company`). Session persistence via a
 patchright stealth browser; reads + most writes run browserless through pure `requests`.
+
+For unattended use the server has a read-only mode: `LINKEDIN_READ_ONLY=1` blocks every writing
+tool and leaves the reads untouched → `26-READ-ONLY-MODE.md`.

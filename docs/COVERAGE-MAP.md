@@ -23,7 +23,12 @@ through pure `requests`; comment/reaction SDUI writes replay a captured full bod
   `delete_comment` (all browserless)
 - *Messaging (browserless live):* `send_dm`, `recall_message`, `react_to_message`
 - *Network:* `follow_company`, `connect`, `endorse_skill` (browserless 200), `remove_connection`
-- *Session:* `session_status`, `refresh_session`
+- *Session:* `session_status` (also reports `read_only`), `refresh_session`
+
+**Guardrails on the write surface:** people-facing / destructive tools require `confirm=True`, and
+`LINKEDIN_READ_ONLY=1` blocks **every** writing tool of the MCP server outright (reads unaffected)
+— the recommended default for cron / unattended agents. Offline-proven, not yet live-tested; scope
+and honest limit in `26-READ-ONLY-MODE.md`.
 
 **Key finding:** SDUI writes are ALL browserless-replayable — the earlier `currentActor` "needs a
 browser" story was a red herring (that field is empty in the real browser request too). Two things

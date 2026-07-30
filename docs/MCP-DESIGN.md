@@ -165,6 +165,11 @@ JSON schema automatically (that's the whole point — `@mcp.tool def send_dm(...
 - **No mass automation.** Rate-limit + no loops over strangers. ToS reality stays in the README.
 - **Secrets never leave the box.** Cookies live in the persistent profile / tmp, never in tool
   args or responses.
+- **Read-only mode** *(added after this brief was written — shipped, see `26-READ-ONLY-MODE.md`)*:
+  `LINKEDIN_READ_ONLY` blocks every writing tool of the server outright, independent of and in
+  addition to the `confirm` gates. The right default for cron/agent operation. It lives in the tool
+  layer (`../mcp/server.py`), like every other guardrail — and is therefore an operating mode of
+  the server, not a guarantee for code that imports `LinkedInClient` directly.
 
 ---
 

@@ -125,6 +125,14 @@ flowchart LR
 `send_dm`, `recall_message`, `repost`, `delete_repost`, `connect`, `remove_connection`) require
 `confirm=True`.
 
+🔒 **Read-only mode** — `LINKEDIN_READ_ONLY=1` blocks **every** writing tool of the server outright
+(it raises; reads keep working). The recommended default for a cron job or an unattended agent that
+should only watch LinkedIn: the capability is removed, not merely discouraged by the prompt. Only
+`0`/`false` switch it back on; any other value counts as ON, so a typo can never grant write
+access. `session_status()` reports `read_only`. It is an operating mode of the MCP server, **not** a
+library guarantee — a script importing `LinkedInClient` directly bypasses it. Offline-proven, not
+yet live-tested → [`docs/26-READ-ONLY-MODE.md`](docs/26-READ-ONLY-MODE.md).
+
 ### Run it
 
 ```bash
@@ -196,6 +204,7 @@ settings, recommendations, quote-repost.
 | `docs/09`–`22` | Profile editing (16 sections + contact-info + about + open-to-work) |
 | `docs/10` · `23` | Post interactions (like/save/repost) · Read & discovery endpoints |
 | `docs/24` · `25` | Advanced posts (edit/poll/media/mention) · Network & contact actions |
+| **[`docs/26-READ-ONLY-MODE.md`](docs/26-READ-ONLY-MODE.md)** | `LINKEDIN_READ_ONLY` — blocking every write for cron/agent use, and what it does not protect |
 | `docs/BROWSERLESS-REPLAY.md` | The `states[]` finding in depth |
 | `docs/MCP-DESIGN.md` | Why the server is built the way it is |
 

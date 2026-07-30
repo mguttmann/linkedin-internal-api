@@ -23,6 +23,9 @@ Design + rationale: **`../docs/MCP-DESIGN.md`**.
 - 🔒 Guardrails: people-facing / destructive tools (`create_post`, `edit_post`, `delete_post`,
   `send_dm`, `recall_message`, `repost`, `delete_repost`, `connect`, `remove_connection`)
   require `confirm=True`.
+- 🔒 **Read-only mode:** `LINKEDIN_READ_ONLY=1` blocks **every** writing tool outright (it raises;
+  reads keep working). Recommended default for cron / unattended agents. Offline-proven, not yet
+  live-tested — full reference incl. its honest limit: `../docs/26-READ-ONLY-MODE.md`.
 
 ## Layout
 ```
@@ -35,8 +38,10 @@ mcp/
 ├── bootstrap_login.py     # one-time: open stealth window, wait for human login, persist
 ├── login_once.py          # one-time: form login from LI_EMAIL/LI_PASS env (gitignored — create locally)
 ├── tests/
+│   ├── conftest.py        # pins the ambient env: removes LINKEDIN_READ_ONLY per test
 │   ├── test_server.py     # offline: tool registration + guardrails (4/4)
-│   └── test_client.py     # offline: write bodies + endpoints, mocked vgreq (19/19)
+│   ├── test_readonly.py   # offline: LINKEDIN_READ_ONLY gate — every write blocked, zero calls
+│   └── test_client.py     # offline: write bodies + endpoints, mocked vgreq
 └── .venv/                 # dedicated venv (gitignored)
 ```
 
@@ -69,6 +74,19 @@ uv pip install --python .venv/bin/python fastmcp patchright requests
 **Network:** `follow_company`, `connect`, `endorse_skill`, `remove_connection`.
 **Session:** `session_status` (no browser), `refresh_session` (launches Chrome).
 Full endpoint map: `../docs/COVERAGE-MAP.md` + `../docs/04-WRITE-OPERATIONS.md`.
+
+### Read-only operation
+
+```bash
+LINKEDIN_READ_ONLY=1 .venv/bin/python server.py    # reads only; every write raises
+```
+
+Only `0` and `false` (any case) switch it off; unset/empty do too. **Any** other value — including
+`off`, `no` or a typo like `ja` — counts as ON (plus a warning on stderr), so a mistyped value can
+never hand out write access. `session_status()` reports `read_only: true|false`, so an agent can
+check the mode without attempting a write. The flag is an **operating mode of this server**, not a
+library guarantee: code that imports `LinkedInClient` directly (`tools/*.py`, tests) bypasses it.
+Details, whitelisted `dry_run` path and test evidence: `../docs/26-READ-ONLY-MODE.md`.
 
 > **Design principle — requests-first, browser-fallback:** every tool tries the browserless
 > `vgreq` path first (fast/invisible); the patchright browser is only the session source + the
