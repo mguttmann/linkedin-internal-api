@@ -19,7 +19,9 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
 
 **MCP tools:**
 - *Reads (browserless):* `get_me`, `get_my_posts`, `get_profile`, `get_notifications`,
-  `get_conversations`, `get_connections_summary`, `get_post_comments`, `get_link_preview`
+  `get_conversations`, `get_connections_summary`, `get_post_comments`, `get_link_preview`,
+  `get_job`, `get_job_recommendations` (both ungated reads, offline-proven only — **not yet
+  live-tested**, remaining open items in `27-JOBS.md` §6)
 - *Posts:* `create_post` (+poll_urn), `edit_post`, `delete_post`, `create_poll`, `save_post`,
   `repost`, `delete_repost` (repost create browserless 200; repost delete captured via browser
   only — the `delete_repost` tool is **not operational** and now **refuses up front, without ever
@@ -206,8 +208,10 @@ more than the evidence carries):
 ## 9. Jobs
 | Function | Endpoint | Status |
 |---|---|---|
-| Read job recommendations/cards | `voyagerJobsDashJobCards` etc. | 🔍 |
-| Read job posting detail | `voyagerJobsDashJobPostingDetailSections` | 🔍 |
+| Read job recommendations/cards | `graphql voyagerJobsDashJobsFeed` (count + cursor variant) | 🔍 MCP `get_job_recommendations` — flat cards; `state` tells "no jobs" from "could not read", ambiguous container candidates and partial loss have their own state/`reason`, and `read_entries`/`discarded` balance `count` against the raw container; a candidate nested under an empty container IS found (pinned by test); offline-proven against synthetic fixtures, **not yet live-tested**; remaining open items (the candidate search has a depth/width limit, and the container is picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
+| Read job posting detail | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li) | 🔍 (owner's live measurement 2026-07-30) MCP `get_job` — flat projection, identity-checked at exact identifying keys and independently of key order: a divergent (or self-contradictory) job id in the body is a hard abort with **no** `url`, never a correction; `company` is joined on the reference the body itself carries, `null` when ambiguous — the reference *path* is unproven against a real body — `27-JOBS.md` |
+| Read job posting detail (dash / detail sections) | `voyagerJobsDashJobPostingDetailSections` | 🔍 catalogued, not used by any tool |
+| **Search** jobs (keyword + filters) | ? | ❌ no capture of the search route or its filter grammar — deliberately **not** built (`27-JOBS.md` §5) |
 | **Save / unsave** a job | ? | ❌ |
 | **Apply** to a job (Easy Apply) | `voyagerJobsDashOnsiteApplyApplication` seen | ❌ write |
 | Set job **alerts / preferences** | `voyagerJobsDashJobSeekerPreferences` | 🔍 read verified; **write not buildable on current evidence** — open items [O-1]…[O-4] in `22-OPEN-TO-WORK.md` (the only documented write path switches the recruiter signal ON; `minimumPay` is ABSENT repo-wide) |

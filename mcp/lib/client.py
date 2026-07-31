@@ -21,6 +21,8 @@ from typing import Optional
 
 import requests
 
+from . import jobs_parse
+
 # Reuse the proven pure-requests client from the internal-api repo (sibling ../lib).
 _REPO_LIB = os.path.join(os.path.dirname(__file__), "..", "..", "lib")
 sys.path.insert(0, os.path.abspath(_REPO_LIB))
@@ -360,6 +362,146 @@ class LinkedInClient:
         full = (f"{BASE}/graphql?includeWebMetadata=true"
                 f"&variables=(url:{enc})&queryId={self._URLPREVIEW_QID}")
         return self._vg().get(full).json()
+
+    # --- jobs reads (route from Manuel's own live evidence 2026-07-30, HTTP 200) ----------
+    # LEGACY REST resource /jobs/jobPostings/<id> — NOT the dash resource
+    # voyagerJobsDashJobPostings and NOT /graphql. Both exist; they are different routes.
+    _JOB_POSTING_DECO = "com.linkedin.voyager.deco.jobs.web.shared.WebFullJobPosting-65"
+    # jobs-feed queryId hashes rotate on LinkedIn deployments (data/endpoints_voyager.json:746,
+    # :996) — re-grab both via tools/crawl_recursive.py if the feed starts 404-ing.
+    _JOBS_FEED_QID = "voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815"
+    _JOBS_FEED_PAGE_QID = "voyagerJobsDashJobsFeed.711cec89dd87dcf89df6a9d6e7ab5682"
+
+    @staticmethod
+    def _read_json(r) -> tuple[Optional[dict], Optional[str]]:
+        """(parsed body, error sentence). A non-JSON 200 is a failed read, not an empty one."""
+        try:
+            body = r.json()
+        except Exception:
+            return None, ("the response body was not JSON — the session is most likely stale "
+                          "(a login/interstitial page); check session_status()")
+        if not isinstance(body, dict):
+            return None, f"the response body was a {type(body).__name__}, not a JSON object"
+        return body, None
+
+    def get_job(self, job_id: str | int, description_chars: int = 4000) -> dict:
+        """Read ONE job posting as a flat projection. 🔍 route (Manuel's live evidence 2026-07-30).
+
+        GET /voyager/api/jobs/jobPostings/<id>?decorationId=…WebFullJobPosting-65
+
+        job_id accepts an int, a numeric string, a jobPosting URN or a full job URL; unusable
+        input returns an honest error dict WITHOUT any HTTP call.
+
+        IDENTITY IS ENFORCED: if the response body carries a job id different from the requested
+        one — or two identifying ids that disagree with each other — this returns ok=False and NO
+        `url` at all. The body id is never adopted and the url is never built from it (Manuel's
+        explicit instruction) — otherwise a caller would receive a link to a different job than
+        the one it just read. A body without any identifying id, and a body that identifies the
+        job but yields no readable field, are reported as such (`identity`, `error`), never as a
+        success.
+
+        Returns {status, ok, job_id, url, title, company, location, employment_status,
+        remote_allowed, listed_at, applies, views, salary, salary_present, reposted,
+        description_text, description_truncated} on success, else {status, ok: False, error, note}.
+        """
+        try:
+            jid = jobs_parse.normalize_job_id(job_id)
+        except ValueError as e:
+            return {"status": "invalid_input", "ok": False, "requested": str(job_id),
+                    "error": str(e),
+                    "note": ("nothing was sent. Pass a numeric job id, a urn:li:fsd_jobPosting:<id>"
+                             " URN or a linkedin.com/jobs/view/<…>-<id>/ URL")}
+        chars, clamp_note = jobs_parse.effective_description_chars(description_chars)
+        url = (f"{BASE}/jobs/jobPostings/{jid}"
+               f"?decorationId={self._JOB_POSTING_DECO}")
+        r = self._vg().get(url)
+        base = {"status": r.status_code, "job_id": jid, "endpoint": "voyager.jobs.jobPostings.get"}
+        if r.status_code != 200:
+            return {**base, "ok": False,
+                    "error": f"HTTP {r.status_code} for job {jid}",
+                    "note": ("the job may be closed/unavailable, or the decorationId has rotated "
+                             "— re-capture the request with tools/crawl_recursive.py")}
+        raw, parse_error = self._read_json(r)
+        if parse_error:
+            return {**base, "ok": False, "error": parse_error, "note": parse_error}
+        inband = jobs_parse.inband_error(raw)
+        if inband:
+            return {**base, "ok": False, "error": inband,
+                    "note": ("HTTP 200 carrying an error envelope — a 200 alone is not a read; "
+                             "check the session and re-capture the decorationId")}
+        read = jobs_parse.read_job_posting(raw, jid, chars)
+        if not read["ok"]:
+            out = {**base, "ok": False, "identity": read["identity"], "error": read["reason"],
+                   "note": ("no fields and no url are returned unless the body identifies the "
+                            "requested job AND carries readable content — a url must never be "
+                            "built from an id found in the body")}
+            if read["identity"] == "mismatch":
+                out["body_job_id"] = read["body_job_id"]
+                out["body_job_ids"] = read["body_job_ids"]
+            return out
+        out = {**base, "ok": True, **read["fields"]}
+        if clamp_note:
+            out["note"] = clamp_note
+        return out
+
+    def get_job_recommendations(self, count: int = 20, pagination_token: str = "") -> dict:
+        """LinkedIn's own job recommendations for the owner. 🔍 captured route (endpoints:746).
+
+        GET /voyager/api/graphql?includeWebMetadata=true&variables=(count:<n>,start:0)
+            &queryId=voyagerJobsDashJobsFeed.<hash>
+        With pagination_token the captured cursor variant (endpoints:996) is used instead.
+
+        'No jobs' and 'could not read' are DIFFERENT answers here: `state` is "hits"/"empty"
+        (ok=True, the read container itself was empty) or "unknown"/"drift"/"ambiguous" (ok=False,
+        with the re-capture path). A silent `count: 0` for a full page is exactly the failure this
+        guards. `read_entries`/`discarded` balance `count` against the raw container; a partial
+        loss stays ok=True but names itself in `note`.
+        """
+        try:
+            n = int(count)
+        except (TypeError, ValueError):
+            n = -1
+        if isinstance(count, bool) or n <= 0:
+            return {"status": "invalid_input", "ok": False, "requested": repr(count),
+                    "error": "count must be a positive number",
+                    "note": "nothing was sent"}
+        if pagination_token:
+            enc = urllib.parse.quote(str(pagination_token), safe="")
+            url = (f"{BASE}/graphql?includeWebMetadata=true&variables=(paginationToken:{enc})"
+                   f"&queryId={self._JOBS_FEED_PAGE_QID}")
+        else:
+            url = (f"{BASE}/graphql?includeWebMetadata=true&variables=(count:{n},start:0)"
+                   f"&queryId={self._JOBS_FEED_QID}")
+        r = self._vg().get(url)
+        base = {"status": r.status_code, "endpoint": "voyager.graphql.jobsFeed",
+                "requested_count": n}
+        if r.status_code != 200:
+            return {**base, "ok": False, "state": "unknown", "count": 0, "results": [],
+                    "error": f"HTTP {r.status_code} for the jobs feed",
+                    "note": ("the queryId hash may have rotated — re-grab it with "
+                             "tools/crawl_recursive.py and update _JOBS_FEED_QID")}
+        raw, parse_error = self._read_json(r)
+        if parse_error:
+            return {**base, "ok": False, "state": "unknown", "count": 0, "results": [],
+                    "error": parse_error, "note": parse_error}
+        inband = jobs_parse.inband_error(raw)
+        if inband:
+            return {**base, "ok": False, "state": "unknown", "count": 0, "results": [],
+                    "error": inband,
+                    "note": ("HTTP 200 carrying an error envelope — a 200 alone is not a read; "
+                             "re-grab the queryId hash with tools/crawl_recursive.py")}
+        read = jobs_parse.read_job_collection(raw, limit=n)
+        out = {**base, "ok": read["ok"], "state": read["state"], "count": read["count"],
+               "results": read["results"], "read_entries": read["read_entries"],
+               "discarded": read["discarded"], "paging_total": read["paging_total"],
+               "pagination_token": read["pagination_token"]}
+        if read["reason"]:
+            # A reason on a SUCCESSFUL read is a partial loss, not a failure: it belongs in `note`
+            # only. Calling it an `error` on ok=True would train the agent to ignore the field.
+            out["note"] = read["reason"]
+            if not read["ok"]:
+                out["error"] = read["reason"]
+        return out
 
     # --- writes (all verified endpoints from docs/04, 06-19) ------------
     # Full endpoint map: docs/COVERAGE-MAP.md. Each write below carries a live-captured body.

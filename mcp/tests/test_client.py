@@ -595,6 +595,234 @@ def test_graphql_write_bodies_are_unchanged_by_the_errors_check(monkeypatch):
                     "queryId": _FAKE_REPOST_QID, "includeWebMetadata": True}
 
 
+# ── jobs reads: get_job / get_job_recommendations ────────────────────────
+# The parsing itself is proven in mcp/tests/test_jobs_parse.py against synthetic fixtures; what
+# is asserted HERE is the client layer: the exact URL, that unusable input sends NOTHING, and
+# that a body which cannot be identified/read never comes back as a success.
+_JOB_ID = "1234567890"
+
+
+def _reading_client(resp_json, code=200, text="", not_json=False):
+    """A client whose vgreq.get returns a canned body + status; records every requested URL."""
+    calls = {"get": [], "post": [], "delete": []}
+    fake = types.ModuleType("vgreq")
+    raw = text
+
+    class R:
+        status_code = code
+        text = raw
+
+        def json(self_):
+            if not_json:
+                raise ValueError("Expecting value: line 1 column 1 (char 0)")
+            return resp_json
+
+    fake.get = lambda url, *a, **k: (calls["get"].append(url) or R())
+    fake.post = lambda url, body=None, *a, **k: (calls["post"].append((url, body)) or R())
+    fake.delete = lambda url, *a, **k: (calls["delete"].append(url) or R())
+    sys.modules["vgreq"] = fake
+    import importlib
+    import lib.client as cl
+    importlib.reload(cl)
+    return cl.LinkedInClient(), calls
+
+
+def _job_fixture():
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "job_posting.json"),
+              "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _feed_fixture():
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "jobs_feed.json"),
+              "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def test_get_job_hits_the_legacy_rest_route_with_the_captured_decoration():
+    # Manuel's live evidence names /jobs/jobPostings/<id> — NOT voyagerJobsDashJobPostings and
+    # NOT /graphql. Both of those exist and are different routes; confusing them is the failure.
+    li, calls = _reading_client(_job_fixture())
+    li.get_job(_JOB_ID)
+    url = calls["get"][-1]
+    assert url.startswith("https://www.linkedin.com/voyager/api/jobs/jobPostings/" + _JOB_ID)
+    assert ("decorationId=com.linkedin.voyager.deco.jobs.web.shared.WebFullJobPosting-65"
+            in url)
+    assert "graphql" not in url and "JobsDashJobPostings" not in url
+
+
+def test_get_job_accepts_a_urn_and_a_url_and_asks_for_the_numeric_id():
+    for value in ("urn:li:fsd_jobPosting:1234567890",
+                  "https://www.linkedin.com/jobs/view/platform-engineer-at-example-1234567890/"):
+        li, calls = _reading_client(_job_fixture())
+        res = li.get_job(value)
+        assert f"/jobPostings/{_JOB_ID}?" in calls["get"][-1]
+        assert res["ok"] is True and res["job_id"] == _JOB_ID
+
+
+def test_get_job_projects_the_fixture_flat():
+    li, _ = _reading_client(_job_fixture())
+    res = li.get_job(_JOB_ID)
+    assert res["ok"] is True and res["status"] == 200
+    assert res["url"] == f"https://www.linkedin.com/jobs/view/{_JOB_ID}/"
+    assert res["title"] == "Platform Engineer" and res["company"] == "Example Company"
+    assert res["reposted"] is False and res["salary_present"] is True
+    assert res["description_text"].startswith("We run a small platform team")
+
+
+def test_get_job_refuses_unusable_input_without_any_call():
+    for value in ("", "not a job", "urn:li:activity:1", 0, -3, None):
+        li, calls = _reading_client(_job_fixture())
+        res = li.get_job(value)
+        assert calls["get"] == [] and calls["post"] == [] and calls["delete"] == [], \
+            f"{value!r} must not reach the transport"
+        assert res["ok"] is False and res["status"] == "invalid_input"
+        assert res["error"] and "Traceback" not in res["error"]
+
+
+def test_get_job_aborts_hard_on_an_id_mismatch_and_returns_no_url():
+    # Manuel's explicit instruction: do not correct, do not warn. A url built from the body id
+    # would point at a different job than the one that was read.
+    li, _ = _reading_client(_job_fixture())
+    res = li.get_job("9999999999")
+    assert res["ok"] is False and res["identity"] == "mismatch"
+    assert res["job_id"] == "9999999999", "the requested id stays the requested id"
+    assert res["body_job_id"] == _JOB_ID
+    assert "url" not in res, "no url may leave on a mismatch"
+    assert "jobs/view" not in json.dumps(res), "the body id must not become a link"
+    assert "title" not in res and "description_text" not in res, \
+        "no payload of the foreign job may leak into the result"
+
+
+def test_get_job_reports_a_missing_identifying_witness():
+    li, _ = _reading_client({"data": {"title": "Platform Engineer", "applies": 3}})
+    res = li.get_job(_JOB_ID)
+    assert res["ok"] is False and res["identity"] == "absent"
+    assert "url" not in res and "identifying" in res["error"]
+
+
+def test_get_job_is_honest_on_a_non_200_and_on_a_200_error_envelope():
+    li, _ = _reading_client({}, code=404)
+    res = li.get_job(_JOB_ID)
+    assert res["ok"] is False and res["status"] == 404 and "re-capture" in res["note"]
+    li, _ = _reading_client({"status": 403, "message": "Forbidden",
+                             "data": {"$type": "com.linkedin.voyager.ErrorResponse"}})
+    res = li.get_job(_JOB_ID)
+    assert res["ok"] is False and "403" in res["error"], "a 200 with an error body is not a read"
+
+
+def test_get_job_is_honest_when_the_body_is_not_json():
+    li, _ = _reading_client(None, not_json=True)
+    res = li.get_job(_JOB_ID)
+    assert res["ok"] is False and "not JSON" in res["error"]
+    assert "session_status" in res["note"], "the note must name the way out"
+
+
+def test_get_job_declares_a_clamped_description_budget():
+    li, _ = _reading_client(_job_fixture())
+    res = li.get_job(_JOB_ID, description_chars=0)
+    assert res["ok"] is True and str(20000) in res["note"]
+
+
+def test_get_job_recommendations_uses_the_captured_feed_query():
+    li, calls = _reading_client(_feed_fixture())
+    res = li.get_job_recommendations(3)
+    url = calls["get"][-1]
+    assert "/graphql?includeWebMetadata=true&variables=(count:3,start:0)" in url
+    assert "queryId=voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815" in url
+    assert res["ok"] is True and res["state"] == "hits" and res["count"] == 3
+    assert res["pagination_token"] == "SYNTHETIC_PAGINATION_TOKEN"
+    assert res["results"][0]["url"] == "https://www.linkedin.com/jobs/view/1111111111/"
+
+
+def test_get_job_recommendations_applies_the_requested_count():
+    # HARDENING (tester). The parser takes a limit; that the CLIENT hands the requested count down
+    # is a separate claim. Unproven, a 50-card page would blow the agent's context window.
+    li, _ = _reading_client(_feed_fixture())
+    res = li.get_job_recommendations(1)
+    assert res["ok"] is True and res["state"] == "hits"
+    assert res["count"] == 1 and len(res["results"]) == 1
+    assert res["paging_total"] == 3, "the server-side total stays visible next to the capped list"
+
+
+def test_get_job_applies_the_requested_description_budget():
+    # HARDENING (tester). That the resolved budget actually reaches the projection is unproven:
+    # the clamp test only reads the note, and the fixture description is short enough to survive
+    # the default. A client that dropped the argument would pass the whole suite.
+    li, _ = _reading_client(_job_fixture())
+    res = li.get_job(_JOB_ID, description_chars=20)
+    assert res["ok"] is True
+    assert len(res["description_text"]) == 20
+    assert res["description_truncated"] is True
+
+
+def test_get_job_recommendations_uses_the_captured_cursor_query_with_the_token():
+    li, calls = _reading_client(_feed_fixture())
+    li.get_job_recommendations(20, pagination_token="aq4V+nwzP/OiDU")
+    url = calls["get"][-1]
+    assert "variables=(paginationToken:aq4V%2BnwzP%2FOiDU)" in url, "the token must be encoded"
+    assert "queryId=voyagerJobsDashJobsFeed.711cec89dd87dcf89df6a9d6e7ab5682" in url
+    assert "count:" not in url
+
+
+def test_get_job_recommendations_refuses_a_useless_count_without_any_call():
+    for value in (0, -1, "many", None, True):
+        li, calls = _reading_client(_feed_fixture())
+        res = li.get_job_recommendations(value)
+        assert calls["get"] == [], f"count={value!r} must not reach the transport"
+        assert res["ok"] is False and res["status"] == "invalid_input"
+
+
+def test_get_job_recommendations_tells_an_empty_page_from_an_unreadable_one():
+    li, _ = _reading_client({"data": {"elements": [], "paging": {"count": 20, "total": 0}}})
+    empty = li.get_job_recommendations(20)
+    assert empty["ok"] is True and empty["state"] == "empty" and empty["count"] == 0
+    li, _ = _reading_client({"data": {}})
+    unknown = li.get_job_recommendations(20)
+    assert unknown["ok"] is False and unknown["state"] == "unknown"
+    assert "re-capture" in unknown["note"], "the caller must learn how to close the gap"
+
+
+def test_get_job_recommendations_never_reports_a_silent_zero_for_a_full_page():
+    # The reproduced false success: a real collection came back as ok=True, count=0.
+    body = {"data": {"elements": [{"trackingUrn": "urn:li:fsd_jobPosting:1111111111"},
+                                  {"trackingUrn": "urn:li:fsd_jobPosting:2222222222"},
+                                  {"trackingUrn": "urn:li:fsd_jobPosting:3333333333"}],
+                     "paging": {"count": 20, "start": 0, "total": 3}}}
+    li, _ = _reading_client(body)
+    res = li.get_job_recommendations(20)
+    assert res["ok"] is True and res["count"] == 3 and res["paging_total"] == 3
+    # and the inverse: paging says there are jobs, none could be read → error, not an empty list
+    li, _ = _reading_client({"data": {"elements": [], "paging": {"total": 3}}})
+    drift = li.get_job_recommendations(20)
+    assert drift["ok"] is False and drift["state"] == "drift" and drift["results"] == []
+
+
+def test_get_job_recommendations_is_honest_on_a_graphql_error_with_200():
+    li, _ = _reading_client({"data": None, "errors": [{"message": "PERMISSION_DENIED"}]})
+    res = li.get_job_recommendations(20)
+    assert res["ok"] is False and "PERMISSION_DENIED" in res["error"]
+    assert res["state"] == "unknown" and res["count"] == 0
+
+
+def test_jobs_reads_send_no_mutating_verb():
+    # A "read" that POSTs is not a read. Counted, not assumed.
+    li, calls = _reading_client(_job_fixture())
+    li.get_job(_JOB_ID)
+    li.get_job_recommendations(5)
+    assert calls["post"] == [] and calls["delete"] == []
+    assert len(calls["get"]) == 2
+
+
+def test_jobs_parse_module_is_pure():
+    # No transport may sneak into the parser: it must stay testable without any fake vgreq.
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[1] / "lib" / "jobs_parse.py").read_text()
+    for forbidden in ("import requests", "import vgreq", "patchright", "playwright",
+                      "subprocess", "open("):
+        assert forbidden not in src, f"jobs_parse.py must not contain {forbidden!r}"
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0

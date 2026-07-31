@@ -189,6 +189,39 @@ def get_link_preview(url: str) -> dict:
 
 
 @mcp.tool
+def get_job(job_id: str, description_chars: int = 4000) -> dict:
+    """Read ONE job posting as a flat projection (title, company, location, employment_status,
+    remote_allowed, listed_at, applies, views, salary, reposted, description_text). Browserless.
+
+    job_id accepts a numeric id, a urn:li:fsd_jobPosting:<id> URN or a full
+    linkedin.com/jobs/view/… URL. Unusable input returns an error WITHOUT any call.
+
+    The result is IDENTITY-CHECKED: if the response describes a different job than the requested
+    one — or names two job ids that disagree — ok=False and NO url is returned. The url is always
+    built from the id you asked for, never from an id found in the response. A response that
+    identifies the job but yields no readable field is also ok=False ("could not read" is not "a
+    job without details"). Unknown values are null, never false; `salary_present` tells "salary
+    exists but is not readable" apart from "no salary"."""
+    li.ensure_session()
+    return li.get_job(job_id, description_chars)
+
+
+@mcp.tool
+def get_job_recommendations(count: int = 20, pagination_token: str = "") -> dict:
+    """Return LinkedIn's own job recommendations for the owner (the jobs feed) as flat cards.
+    Browserless read. `count` = how many to fetch; pass the returned pagination_token for the
+    next page.
+
+    `state` distinguishes an ANSWER from a failure: "hits"/"empty" means the result list was
+    really read (ok=True), "unknown"/"drift"/"ambiguous" mean it could NOT be read (ok=False, with
+    the re-capture hint) — an empty list is never reported as "no jobs" unless it was read as
+    empty. `read_entries` and `discarded` balance `count` against the raw list that was read: on a
+    partial loss ok stays True but `note` names how many entries were dropped."""
+    li.ensure_session()
+    return li.get_job_recommendations(count, pagination_token)
+
+
+@mcp.tool
 def session_status() -> dict:
     """Check whether the LinkedIn session is live (a /me probe). Pure API, no browser.
 

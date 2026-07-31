@@ -15,6 +15,7 @@ import server  # noqa: E402
 
 EXPECTED = {"get_me", "get_my_posts", "get_profile", "get_notifications",
             "get_conversations", "get_connections_summary", "get_post_comments", "get_link_preview",
+            "get_job", "get_job_recommendations",
             "session_status", "refresh_session", "like", "unlike", "follow_company",
             "connect", "endorse_skill", "remove_connection",
             "save_post", "repost", "delete_repost",

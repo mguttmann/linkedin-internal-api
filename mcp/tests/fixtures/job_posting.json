@@ -1,0 +1,38 @@
+{
+  "_fixture": "SYNTHETIC and PII-free. Proves the PARSER only, never LinkedIn's response form. The companyDetails nesting below is synthetic too: it exercises the JOIN on a reference the entity itself carries (the employer name lives in included[] per Manuel's capture note, which says WHERE the name sits, not how deep the reference is).",
+  "data": {
+    "$type": "com.linkedin.voyager.jobs.JobPosting",
+    "entityUrn": "urn:li:fs_normalized_jobPosting:1234567890",
+    "companyDetails": {
+      "company": "urn:li:fs_normalized_company:99"
+    },
+    "title": "Platform Engineer",
+    "formattedLocation": "Sample City, Sample Region",
+    "formattedEmploymentStatus": "Full-time",
+    "workRemoteAllowed": true,
+    "employmentStatus": "urn:li:fs_employmentStatus:1",
+    "applies": 12,
+    "views": 340,
+    "listedAt": 1750000000000,
+    "repostedJob": "False",
+    "salaryInsights": {
+      "$type": "com.linkedin.voyager.jobs.SalaryInsights",
+      "entityUrn": "urn:li:fs_salaryInsights:1234567890",
+      "formattedSalary": "60,000 - 80,000 per year"
+    },
+    "description": {
+      "$type": "com.linkedin.voyager.common.AttributedText",
+      "text": "We run a small platform team. You would own the deployment pipeline.",
+      "attributes": [
+        {"start": 0, "length": 2, "type": {"bold": {}}}
+      ]
+    }
+  },
+  "included": [
+    {
+      "$type": "com.linkedin.voyager.organization.Company",
+      "entityUrn": "urn:li:fs_normalized_company:99",
+      "name": "Example Company"
+    }
+  ]
+}

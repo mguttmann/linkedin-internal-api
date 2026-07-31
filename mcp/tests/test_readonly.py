@@ -30,7 +30,9 @@ import server  # noqa: E402
 
 _URN = "urn:li:activity:1111111111111111111"
 
-# The 10 reading tools — ALL allowed under read-only (server.py:99-148, :186-215).
+# The 12 reading tools — ALL allowed under read-only (server.py get_me … refresh_session).
+# The two jobs reads are READS: they must stay on this side of the split, ungated, and each one
+# must actually reach the transport (asserted below) — a "read" that mutates fails here.
 READ_CALLS = {
     "get_me": lambda: server.get_me(),
     "get_my_posts": lambda: server.get_my_posts(1),
@@ -40,6 +42,10 @@ READ_CALLS = {
     "get_connections_summary": lambda: server.get_connections_summary(),
     "get_post_comments": lambda: server.get_post_comments(_URN),
     "get_link_preview": lambda: server.get_link_preview("https://example.com/x"),
+    # a VALID job id on purpose: with unusable input get_job answers without any HTTP call, and
+    # the "must reach the transport" assertion below would prove nothing.
+    "get_job": lambda: server.get_job("1234567890"),
+    "get_job_recommendations": lambda: server.get_job_recommendations(1),
     "session_status": lambda: server.session_status(),
     "refresh_session": lambda: server.refresh_session(),
 }

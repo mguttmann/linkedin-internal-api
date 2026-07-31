@@ -32,7 +32,8 @@ invasive, and every test artifact was removed afterwards (verified clean).
 | Notifications | `voyagerIdentityDashNotificationCards?q=filterVanityName` | ✅ 200 |
 | Any profile by vanityName | `identity/dash/profiles?q=memberIdentity` | ✅ 200 |
 | Search | `graphql voyagerSearchDashClusters` | 🔍 |
-| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 |
+| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 — MCP `get_job_recommendations`, flat cards with a `state` that tells "no jobs" from "could not read"; a container nested under an empty one IS found (pinned by test); offline-proven against synthetic fixtures, **not yet live-tested**; remaining open items (the candidate search has a depth/width limit, and the container is picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
+| Job posting (detail) | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li, **not** the dash resource, **not** GraphQL) | 🔍 owner's own live measurement 2026-07-30 — MCP `get_job`: identity-checked against the requested id at exact identifying keys and order-invariantly, a divergence is a hard abort with **no** `url`; parsing offline-proven, **not yet live-tested** — `27-JOBS.md` |
 | Company page | `graphql voyagerOrganizationDashCompanies` | 🔍 |
 | Events | `graphql voyagerEventsDashEventsCardGroupResource` | 🔍 |
 | Premium analytics | `graphql voyagerPremiumDashAnalyticsView` | 🔍 |

@@ -1,0 +1,43 @@
+{
+  "_fixture": "SYNTHETIC and PII-free. Proves the PARSER only, never LinkedIn's response form. The GraphQL alias below is invented on purpose: the reader must find its container by SHAPE, not by a known alias name.",
+  "data": {
+    "$type": "com.linkedin.restli.common.CollectionResponse",
+    "jobsDashJobsFeedByGlobal": {
+      "$type": "com.linkedin.restli.common.CollectionResponse",
+      "elements": [
+        {
+          "$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+          "trackingUrn": "urn:li:fsd_jobPosting:1111111111",
+          "title": "Platform Engineer",
+          "formattedLocation": "Sample City, Sample Region",
+          "workRemoteAllowed": true,
+          "listedAt": 1750000000000,
+          "repostedJob": "False"
+        },
+        {
+          "$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+          "trackingUrn": "urn:li:fsd_jobPosting:2222222222",
+          "title": "Backend Developer",
+          "formattedLocation": "Sample Town, Sample Region",
+          "listedAt": 1750000001000,
+          "repostedJob": "True"
+        },
+        {
+          "$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+          "trackingUrn": "urn:li:fsd_jobPosting:3333333333",
+          "title": "Site Reliability Engineer",
+          "listedAt": 1750000002000
+        }
+      ],
+      "paging": {"count": 3, "start": 0, "total": 3},
+      "metadata": {"paginationToken": "SYNTHETIC_PAGINATION_TOKEN"}
+    }
+  },
+  "included": [
+    {
+      "$type": "com.linkedin.voyager.organization.Company",
+      "entityUrn": "urn:li:fs_normalized_company:99",
+      "name": "Example Company"
+    }
+  ]
+}
