@@ -23,6 +23,11 @@ was deleted again, so treat that artifact as possibly still standing.
   wrong date the moment it is reused. The runs recorded so far:
   - **2026-07-30, against commit `5a251da`** — the jobs reads (`get_job`,
     `get_job_recommendations`); see the jobs live-run note below.
+  - **2026-07-31, jobs feed** (`count:5`, `queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`)
+    — the owner measured the **response shape** of the feed: the container path, the three-hop
+    module→union→card chain, the module and card key sets, the 18 union branch names and the values of one
+    card. A measured **body is not an executed tool**: this run makes the *shape* 🔍 and makes nothing ✅,
+    because the code that reads it never ran live. See `27-JOBS.md` §1.3.
   - **2026-07-18, against code that was not committed at the time** — the image post
     (`create_post_with_image`); the code reached the repo later and untouched in that respect, see
     note ⁵. What the run proves: the upload + share path executed and the post went live
@@ -48,7 +53,7 @@ was deleted again, so treat that artifact as possibly still standing.
 | Notifications | `voyagerIdentityDashNotificationCards?q=filterVanityName` | ✅ 200 |
 | Any profile by vanityName | `identity/dash/profiles?q=memberIdentity` | ✅ 200 |
 | Search | `graphql voyagerSearchDashClusters` | 🔍 |
-| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 endpoint — **not** verified usable. The **tool's honesty behaviour is ✅ (owner-run)**: on a live HTTP 200 whose body held no collection container under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `ok: false` with the re-capture note — **not** `empty`. The endpoint itself answered but yielded no readable jobs, so it stays open and needs a capture of the **raw** body (`BACKLOG.md`). Parsing offline-proven against synthetic fixtures; remaining open items (the candidate search has a depth/width limit, and the container is picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
+| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 endpoint **and** 🔍 response shape (owner-run 2026-07-31) — still **not** verified usable. The **tool's honesty behaviour is ✅ (owner-run 2026-07-30)**: on a live HTTP 200 whose body held no collection container under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `ok: false` with the re-capture note — **not** `empty`. The owner then measured the body himself: the container is `data.data.jobsDashJobsFeedAll.*elements` and the chain is **three** hops (module → union branch → job card), so the entry level points at **modules**, not at job cards (`27-JOBS.md` §1.3). A reader for that chain exists and is proven **offline** against a fixture of the measured form — **no ✅**, it has never run live (`27-JOBS.md` §7). One consequence for reading the numbers: `paging.total` counts **modules** on this route, so `paging_total > 0` next to `count: 0` is a legitimate promotion-only feed, not an error (the withdrawn invariant, `27-JOBS.md` §3). The offline suite is green; the open items are measured by review probes and are listed in `27-JOBS.md` §6 — the one to know about is that an entity the reader does not recognise as a module can still be projected into a card whose id comes from a foreign position. That is **narrowed but not closed**: an entry the starred list names by **URN** — the measured shape — is now `drift`/`ok=false` instead of a card, held by tests; an entry standing **inlined** in the starred list, and the same shape on the non-starred (search) path, still produce it (§6 item 10) |
 | Job posting (detail) | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li, **not** the dash resource, **not** GraphQL) | ✅ 200 (owner-run) — MCP `get_job`, flat projection confirmed against real data; **plus** ✅ 404 (owner-run) for a non-existent id: honest error, requested `job_id` unchanged. That is the **404 path only** — the id-**mismatch** abort remains fixture-proven and was explicitly *not* exercised. Details and the field-level evidence in the live-run note below and `27-JOBS.md` |
 | Company page | `graphql voyagerOrganizationDashCompanies` | 🔍 |
 | Events | `graphql voyagerEventsDashEventsCardGroupResource` | 🔍 |
@@ -114,10 +119,17 @@ was deleted again, so treat that artifact as possibly still standing.
 > `state: "unknown"`, `count: 0`, `read_entries: 0`, `paging_total: null`, `ok: false` plus the
 > re-capture note — and explicitly **not** `empty`. The previous version would have claimed
 > `ok=True, count=0, "a genuinely empty page"` here; that is the false success which caused the first
-> hand-back, and it is now provably gone. **What is missing is the raw response body:** without it,
-> nobody can decide whether the response shape drifted (a different container key), whether the feed
+> hand-back, and it is now provably gone. **What was missing then is the raw response body:** without it,
+> nobody could decide whether the response shape drifted (a different container key), whether the feed
 > was empty or not entitled, or whether an in-band error arrived with a 200. So the **endpoint stays
 > open** (`BACKLOG.md`), while the tool's honesty is verified.
+>
+> **Follow-up, owner-run 2026-07-31 — the shape question is answered, the endpoint question is not.** The
+> owner measured a body of this route himself: the container sits at `data.data.jobsDashJobsFeedAll` and
+> its entry list is `*elements`, which the reader of 07-30 did not accept — a mechanism that produces
+> exactly the observed `unknown`. That is the **mechanism**, not proof about the 07-30 body: it was never
+> kept. A reader for the measured three-hop chain now exists and is proven **offline** only
+> (`27-JOBS.md` §1.3, §4.2), so this adds a 🔍 for the shape and **no ✅** for anything.
 >
 > **Separately — a different, REST-like form measured 400.** The owner also tried
 > `voyagerJobsDashJobsFeed?decorationId=com.linkedin.voyager.dash.deco.jobs.JobsFeed-2&count=5&q=jobsFeed&start=0`

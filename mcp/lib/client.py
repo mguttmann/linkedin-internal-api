@@ -488,10 +488,19 @@ class LinkedInClient:
         With pagination_token the captured cursor variant (endpoints:996) is used instead.
 
         'No jobs' and 'could not read' are DIFFERENT answers here: `state` is "hits"/"empty"
-        (ok=True, the read container itself was empty) or "unknown"/"drift"/"ambiguous" (ok=False,
-        with the re-capture path). A silent `count: 0` for a full page is exactly the failure this
-        guards. `read_entries`/`discarded` balance `count` against the raw container; a partial
-        loss stays ok=True but names itself in `note`.
+        (ok=True) or "unknown"/"card_lost"/"drift"/"ambiguous" (ok=False, with the re-capture path).
+        A silent `count: 0` for a full page is exactly the failure this guards.
+        `read_entries`/`discarded`/`skipped`/`lost`/`unread`/`dropped` balance `count` against the
+        raw container: the feed's entries are jobs-feed MODULES, of which only some carry a job
+        card, so `skipped` counts the promotion/upsell/TABBED siblings that were UNDERSTOOD, `lost`
+        the job cards that did not resolve (state "card_lost", ok=False) and `unread` the module
+        forms this parser does not understand (state "drift", ok=False). `count` is never a quietly
+        shorter list: `requested_count` caps the MODULES LinkedIn returns, not the cards read out
+        of them, so `count` may legitimately exceed it.
+
+        `paging_total` counts MODULES on this route, not jobs: `paging_total` > 0 next to `count: 0`
+        is a legitimate pure-promotion feed (state "empty", ok=True), NOT an error. On the search
+        route `paging.total` counts jobs — do not merge the two.
         """
         try:
             n = int(count)
@@ -526,10 +535,15 @@ class LinkedInClient:
                     "error": inband,
                     "note": ("HTTP 200 carrying an error envelope — a 200 alone is not a read; "
                              "re-grab the queryId hash with tools/crawl_recursive.py")}
-        read = jobs_parse.read_job_collection(raw, limit=n)
+        # No `limit` here on purpose: `n` is the number of MODULES asked of LinkedIn (`count:<n>`),
+        # and one module carries several job cards, so cutting the CARD list to it would drop
+        # understood jobs that cursor paging cannot bring back.
+        read = jobs_parse.read_job_collection(raw)
         out = {**base, "ok": read["ok"], "state": read["state"], "count": read["count"],
                "results": read["results"], "read_entries": read["read_entries"],
-               "discarded": read["discarded"], "paging_total": read["paging_total"],
+               "discarded": read["discarded"], "skipped": read["skipped"],
+               "lost": read["lost"], "unread": read["unread"], "dropped": read["dropped"],
+               "paging_total": read["paging_total"],
                "pagination_token": read["pagination_token"]}
         if read["reason"]:
             # A reason on a SUCCESSFUL read is a partial loss, not a failure: it belongs in `note`

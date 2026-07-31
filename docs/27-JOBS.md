@@ -5,26 +5,34 @@ recommendation feed for the owner. Browserless (pure `requests` through `vgreq`)
 gate — reads never get one — and registered on the READ side of the read-only split
 (`mcp/tests/test_readonly.py`).
 
-**Status of this document (updated 2026-07-30 by the owner's live run against commit `5a251da` —
-provenance and its scope: `STATUS-MATRIX.md`, legend entry "(owner-run)").** The picture is no longer
-uniform, so read the three lines separately:
+**Status of this document (two owner runs; provenance and its scope: `STATUS-MATRIX.md`, legend entry
+"(owner-run)").** The picture is not uniform, so read the four lines separately:
 
-- **`get_job` is ✅ live-verified**, on two paths: **HTTP 200** for a real job id with the flat
-  projection holding up on real data, and **HTTP 404** for an invented one with an honest error that
-  keeps the requested `job_id`. That is the 404 path only — the id-**mismatch** abort was *not*
-  exercised and stays fixture-proven.
-- **`get_job_recommendations` is ✅ only for its honesty**: on a live 200 without a findable container
-  it reported `state: "unknown"`, not `empty`. The **endpoint** is a different matter — it answered but
-  yielded no usable jobs, so it is **not verified usable** and stays open pending a capture of the raw
-  body.
-- **Everything else below is still offline evidence**: the identity table, the state table beyond
-  `unknown`, the container-selection rules, the description cut with its `description_truncated` flag
-  and every `company`-join case — the reference join and the sole-company fallback alike — are proven
-  against **synthetic fixtures** only.
+- **`get_job` is ✅ live-verified** (owner-run 2026-07-30 against `5a251da`), on two paths: **HTTP 200**
+  for a real job id with the flat projection holding up on real data, and **HTTP 404** for an invented
+  one with an honest error that keeps the requested `job_id`. That is the 404 path only — the
+  id-**mismatch** abort was *not* exercised and stays fixture-proven.
+- **`get_job_recommendations` is ✅ only for its honesty** (same run): on a live 200 without a findable
+  container it reported `state: "unknown"`, not `empty`. The **endpoint** is a different matter — it
+  answered but yielded no usable jobs, so it is **not verified usable**.
+- **The SHAPE of the feed body is now known — 🔍, owner-run 2026-07-31.** The owner measured the
+  response of the feed route himself (`count:5`,
+  `queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`) and reported the container path,
+  the module and card key sets, the union branch names and the values of one card. The chain has
+  **three** hops, not two, and `*elements` points at **modules**, not at job cards (§1.3). This is the
+  owner's measurement of a **body**, not a run of this parser: **nothing in this section is ✅**, and
+  the reading code below is **not yet live-tested**.
+- **Everything else below is offline evidence**: the identity table, the state table beyond `unknown`,
+  the container-selection rules, the whole feed module/card projection, the description cut with its
+  `description_truncated` flag and every `company`-join case — the reference join and the sole-company
+  fallback alike — are proven against **fixtures** only (the feed fixture reproduces the owner's
+  measured form and says in its own `_provenance` which values are his and which are synthetic).
 
-The offline suite is green; what that green covers is listed under "What is proven, and how", what the
-live run added is in its own subsection there, and what neither covers is under "Open, not accepted".
-Do not read this file as a release note.
+What the passing tests cover is listed under "What is proven, and how", what the live runs added is in
+its own subsection there, and what neither covers is under "Open, not accepted". **The offline suite is
+green** — which says only that the shapes the tests describe behave as described. The open defects in
+`§6` are measured by **review probes against this very tree**, not by red tests: a green suite is not a
+claim that nothing is open. Do not read this file as a release note.
 
 ---
 
@@ -72,8 +80,16 @@ Both variants are in the endpoint catalogue (`data/endpoints_voyager.json`, sect
 
 **Live status (owner's run, 2026-07-30): this route answered HTTP 200 — and delivered nothing this
 repo could read.** The tool reported `state: "unknown"` (see §4, "What the live run added"). So the
-route is executed but **not verified usable**, and the next step is a capture of the **raw** body, not
-a parser change.
+route is executed but **not verified usable**.
+
+**What the second owner run (2026-07-31) changed about that:** the owner measured a body of this route
+himself, and it *does* carry a container — under `data.data.jobsDashJobsFeedAll`, whose entry list is
+called **`*elements`** (Rest.li's star: a list of URNs resolved through `included[]`). The reader of
+2026-07-30 accepted only the unstarred `elements`, which is a mechanism that produces exactly the
+observed `unknown` on exactly such a body. **That is the mechanism, not an identification of the two
+bodies:** the raw body of the 07-30 run was never kept, so it cannot be shown that it was this shape —
+only that a body of this shape reads as `unknown` under the old reader and is read under the new one
+(offline, §4.2).
 
 **Not this route, and not to be confused with it:** the owner separately probed a REST-like form,
 `voyagerJobsDashJobsFeed?decorationId=com.linkedin.voyager.dash.deco.jobs.JobsFeed-2&count=5&q=jobsFeed&start=0`,
@@ -85,6 +101,69 @@ the GraphQL route above, which the tool exclusively uses (`mcp/lib/client.py`,
 **Re-capture path:** `queryId` and `decorationId` hashes rotate with LinkedIn deployments. When a
 call answers 4xx, re-grab the request with `tools/crawl_recursive.py` and update the two constants
 in `mcp/lib/client.py`; the error `note` of both tools says so at runtime.
+
+### 1.3 The feed body: three hops, and `*elements` points at MODULES (🔍 owner-run 2026-07-31)
+
+The form below is the owner's own measurement of a live response. It is **not** ✅: this repo did not
+execute the call, and that the parser reads this form is proven **offline** only.
+
+```
+data.data.jobsDashJobsFeedAll
+  └─ *elements[i]                    "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,<uuid>)"
+       │  hop A — a URN string, resolved through included[] by entityUrn
+       ▼
+     JobsFeedCardModule
+       └─ entitiesResolutionResults[]  EMBEDDED list, not a reference
+            └─ <union branch>          18 keys, exactly ONE filled; the filled NAME is the type
+                 └─ jobPostingCardWrapper
+                      └─ *jobPostingCard  "urn:li:fsd_jobPostingCard:(<id>,JOBS_HOME_JYMBII)"
+                           │  hop B — a URN string, resolved through included[]
+                           ▼
+                         JobPostingCard   ← the payload
+```
+
+Three consequences, and each of them is why a type-led single hop had to guess:
+
+- **The entry level does not point at job cards.** It points at modules, and a module may carry no job
+  at all. Measured module keys — **not one `*` key** among them: `hide`, `moduleType`, `entityUrn`,
+  `footer`, `header`, `$recipeTypes`, `entitiesResolutionResults`, `$type`. Also usable:
+  `moduleType` ∈ {`VERTICAL_LIST`, `SINGLE`, `TABBED`} and `header.title`.
+- **The union is self-describing.** 18 branch keys, exactly one filled, and the filled key's **name**
+  is the type — nothing has to be inferred from the target. Measured names: `endOfResultsCard`,
+  `jobPostingCardWrapper`, `jobSearchHistoryCard`, `jobSearchSuggestion`, `premiumUpsellSlot`,
+  `seekerNextBestActionComponent`, `carouselEntityHighlightCard`, `feedbackCard`,
+  `newCollectionHeaderCard`, `carouselCollectionCard`, `careerEnrichmentCard`, `tabbedCollection`,
+  `noResultsCard`, `seeAllCard`, `*promotionalCard`, `refreshStateCard`, `jobPostingCard`,
+  `jumpBackInCard`. `jobPostingCard` is a branch **of its own next to** `jobPostingCardWrapper`; it was
+  null throughout the measured run and the parser reads both (`jobs_parse._JOB_BRANCH_KEYS`). The list
+  is documentation, deliberately **not** an allowlist in the code: an unknown sibling branch must stay
+  silently skippable instead of becoming an error at LinkedIn's next deployment.
+- **The card carries its own display fields, so there is no hop after it.** Measured card keys:
+  `preDashNormalizedJobPostingUrn`, `footerItems`, `*jobSeekerJobState`, `primaryActions`,
+  `primaryDescription`, `debugInfo`, `jobInsightsV2ResolutionResults`, `title`, `$recipeTypes`,
+  `relevanceInsight`, `$type`, `secondaryDescription`, `entityUrn`, `logo`, `tertiaryDescription`.
+  Exactly **one** `*` key: `*jobSeekerJobState` (optional — saved/applied/viewed).
+
+Two properties of the card that decide the projection:
+
+1. **Employer and location sit in ONE string**, `primaryDescription.text`, separated by `' · '`. A feed
+   body carries **no `Company` entity**, so unlike `get_job` there is nothing to join — waiting for
+   `Company.name` here waits forever.
+2. **The job id is in the card's own `entityUrn`**, as a tuple: `(<id>,<origin>)`. The `url` and the id
+   for `get_job` are built from that, from nothing else.
+
+The measured run, module by module (this table is the shape of `mcp/tests/fixtures/jobs_feed_modules.json`):
+
+| # | `moduleType` | entries | filled union branch | `header.title` |
+|---|---|---|---|---|
+| 0 | `VERTICAL_LIST` | 3 | `jobPostingCardWrapper` ×3 | a title |
+| 1 | `VERTICAL_LIST` | 0 | — | `null` |
+| 2 | `SINGLE` | 1 | `*premiumUpsellSlot` | `null` |
+| 3 | `SINGLE` | 1 | `*promotionalCard` | `null` |
+| 4 | `TABBED` | 4 | `tabbedCollection` ×4 | a title |
+
+So a feed of five entries answers with three jobs. That arithmetic is the reason for the withdrawn
+invariant in §3.
 
 ---
 
@@ -152,30 +231,80 @@ counts as a mismatch, because resolving it would mean guessing.
 
 ### `get_job_recommendations(count=20, pagination_token="")`
 
-Returns `status`, `ok`, `state`, `count`, `results`, `read_entries`, `discarded`, plus
-`paging_total` and `pagination_token` for the next page. Each card is flat: `job_id`, `url`,
-`title`, `company`, `location`, `remote_allowed`, `listed_at`, `reposted`, `salary`,
-`salary_present`. Duplicate ids are collapsed. A non-positive / non-numeric `count` is refused
-**without any call**.
+Returns `status`, `ok`, `state`, `count`, `results`, `read_entries`, `discarded`, `skipped`, `lost`,
+`unread`, `dropped`, plus `paging_total` and `pagination_token` for the next page. Duplicate ids are
+collapsed — **without a counter**, which is the one subtrahend of the balance that still has no name
+(§6 item 12). A non-positive / non-numeric `count` is refused **without any call**.
+
+Each card is flat. On the **feed** path the values come out of the JobPostingCard itself
+(`jobs_parse.project_feed_job_card`) — no second entity is consulted:
+
+| field | source on the feed card | note |
+|---|---|---|
+| `job_id` | the card's own `entityUrn` tuple, and only that | a second identity on the card (`preDashNormalizedJobPostingUrn`) is read **solely to contradict it**: two disagreeing ids are a loss, never a choice |
+| `url` | built from that `job_id` | `…/jobs/view/<id>/` |
+| `title` | `title` (a string or Attributed Text) | |
+| `company` | the part of `primaryDescription.text` **before** `' · '` | no `Company` join exists in a feed body |
+| `location` | the part **after** the first `' · '` | without the separator the whole text is the employer and `location` is `null` — the missing half is never invented |
+| `module_type`, `module_title` | the module the card stood in (`moduleType`, `header.title`) | says which rail delivered the card |
+| `job_seeker_job_state_urn` | `*jobSeekerJobState`, **passed through unresolved** | optional; the state entity's shape is not measured, so it is not interpreted. Absent → `null`, not an error |
+| `remote_allowed`, `listed_at`, `reposted`, `salary` | not carried by a feed card → `null` | **unknown is not `False`.** `location` may say "(Vor Ort)"; prose is not a measured flag |
+| `salary_present` | `False` — no salary field exists on the card | |
 
 `state` exists so that an agent can tell an **answer** from a **failure**:
 
 | `state` | meaning | `ok` |
 |---|---|---|
-| `hits` | the read container held entries and at least one projected | `True` |
-| `empty` | the read container **itself** held no entries, and no candidate's `paging.total` contradicts that | `True` |
+| `hits` | the read container held entries and at least one job card came out | `True` |
+| `empty` | nothing to read: either the container **itself** held no entries (and no candidate's `paging.total` contradicts that), or every entry was read and understood and none of them carried a job — a pure promotion feed | `True` |
 | `unknown` | no container was found — we could not read. **Not** "no jobs" | `False` |
 | `ambiguous` | more than one candidate container holds entries; which one is the jobs collection is not decidable, so **none** is read | `False` |
-| `drift` | the container (or a candidate's `paging.total`) says there are jobs, but not one entry was projectable | `False` |
+| `card_lost` | a job branch **was** there and its card did not resolve in `included[]` (or resolved twice): at least one card is missing from `results` | `False` |
+| `drift` | the container says there are entries but not one was projectable; a candidate reports `paging.total > 0` next to an **empty entry list**; an entry arrived in a form this parser does not understand (`unread > 0` — see the "unread" level below); or the balance guard did not add up | `False` |
 
 Every non-`hits`/`empty` state carries a `reason` naming the re-capture path.
 
-**`read_entries` / `discarded` are the balance against the raw list.** `read_entries` is the raw
-length of the container's `elements`; `discarded` counts those that could not be projected. The
-verdict *and* the balance are computed on the raw list, never on the projectable subset — filtering
-first is what once let a container of three URN strings report "an empty page". A partial loss keeps
-`ok=True` (the read did happen) but always names itself in `reason` / the tool's `note`, so a
-genuine one-card page stays distinguishable from a three-card page that mostly failed to parse.
+**The three levels — silent toward siblings, named toward a form we do not understand, fail-closed
+toward a lost card.** The first and the last are not in conflict because they sit on different levels of
+the chain (`jobs_parse._feed_module_cards`); the middle one exists because "not understood" was being
+sold as the first, which is the false success this ticket rejected one level deeper:
+
+- **Silent** (`skipped`): a module whose filled union branch is not a job branch (promotion, upsell,
+  `TABBED` collections), a module with an **empty** entry list, and a module with `hide: true`. Those are
+  **expectable siblings**, measured in the owner's own run — they produce neither a value nor an
+  ambiguity. Silence toward an **unknown branch name** belongs here too and is deliberate (§1.3).
+- **Unread** (`unread`, `state="drift"`, `ok=False`): a form this parser does not understand. Two of
+  those forms sit **inside** a module — the measured container key `entitiesResolutionResults`
+  **missing or not a list** (i.e. a rename of exactly that key,
+  `module_entitiesResolutionResults_missing` / `_not_a_list`), a union item that is not an object
+  (`union_item_is_not_an_object`), and a union item with **no** filled branch at all
+  (`union_item_with_no_filled_branch`; measured is "exactly one filled"). Two more sit one level
+  **above** them, at the entry itself, and they are the chokepoint of the whole chain
+  (`jobs_parse.read_job_collection`): an entry that came out of the **starred** entry list `*elements`
+  and that is not readable as a module (`referenced_entity_that_is_not_a_readable_feed_module`), and an
+  **inlined** entity that carries a job branch without being a readable module
+  (`entity_with_a_job_branch_that_is_not_a_readable_module`). Neither is projected as a card; the reason
+  why is §6 item 10. None of these are job-free modules; they are entries we could not read, so `count`
+  may be incomplete and the `reason` names which forms appeared. Silence toward a missing **container
+  key** is what this level ended.
+- **Fail-closed** (`lost`): a `jobPostingCardWrapper` (or a `jobPostingCard` branch) **is** present and
+  its card cannot be resolved — including a union item with **both** job branches filled, where which
+  card is *the* card is not decidable. Then a card is lost, which is `state="card_lost"`, `ok=False`,
+  `lost=N`, with the count of lost against the count of named cards in `reason`. `results` still carries
+  what *was* read — nothing is invented to fill the gap, and nothing is quietly shortened.
+
+**`read_entries` / `discarded` / `skipped` / `lost` / `unread` / `dropped` are the balance against the
+raw list.** `read_entries` is the raw length of the container's entry list — on the feed those entries
+are **modules**; `discarded` counts entries that could not be projected at all, `skipped` the modules
+that carried no job, `lost` the job branches whose card did not resolve, `unread` the forms that were not
+understood, `dropped` the cards a caller's `limit` cut off (named in `reason`, and on the feed path the
+client passes no `limit` at all — see §6 item 8). Verdict *and* balance are computed on the raw list,
+never on the projectable subset — filtering first is what once let a container of three URN strings
+report "an empty page". Behind all of them sits a **balance guard**: every card that was projected is
+either returned, a collapsed duplicate, or a named cut; if that ever fails to add up, the read reports
+`drift` instead of the short list (`jobs_parse.read_job_collection`). The one subtrahend the guard uses
+but does not **publish** is the collapsed duplicate — §6 item 12, and it is why `count` is still not a
+fully closed quantity on this path.
 
 ---
 
@@ -227,16 +356,54 @@ that asymmetry an outer node carrying `elements: []` swallowed a filled containe
 and `state="empty"` was claimed over readable cards — the handed-back false-success class in
 parent/child form.
 
-Additional invariants: "empty" may only be claimed because it was **read** (a missing container is
-`unknown`, never `empty`), and a `paging.total > 0` next to an empty hit list is an error, not an
-empty list. The company name is a **join** on a reference the read entity itself carries, at any
-depth, not a pick from the entity pool (see the next section).
+**The container has two possible entry keys.** `elements` (inlined entries) and `*elements` (the star is
+Rest.li's marker that the values are URNs resolved through `included[]`) — `jobs_parse._ENTRY_KEYS`. The
+starred spelling is admitted **only together with a collection witness in the same node**
+(`jobs_parse.container_entry_keys`), because a starred list of URNs is by shape indistinguishable from
+any other URN list in the body; without that condition a similar-jobs rail would qualify as the
+container. The owner's feed sends the starred form (§1.3), which is why the earlier reader found nothing.
+
+Additional invariant: "empty" may only be claimed because it was **read** — a missing container is
+`unknown`, never `empty`. The company name for a **single posting** is a **join** on a reference the read
+entity itself carries, at any depth, not a pick from the entity pool (see the next section); a **feed**
+card has no company to join at all (§1.3).
+
+### The withdrawn invariant — `paging.total` counts different things on the two routes
+
+An earlier rule of this repo said: *`paging.total > 0` next to zero results is an error.* **For the feed
+that is wrong, and the owner measured why:** `paging` sits on the same node as `*elements`, but `total`
+counts **modules, not job cards**. A feed with five modules can mean three jobs and two advertising
+slots (§1.3). So `paging_total > 0` next to `count: 0` is the **normal case** of a pure promotion feed:
+`state="empty"`, `ok=True`, no `reason`, no error. Pinned by
+`test_a_pure_promotion_feed_with_a_paging_total_is_empty_and_not_an_error` (parser) and
+`test_a_pure_promotion_feed_is_not_an_error_at_the_client_boundary` (tool).
+
+Two boundaries of that withdrawal, and neither may be widened by accident:
+
+- **It is withdrawn for the FEED route only.** On the **search** route (`voyagerJobsDashJobCards`)
+  `paging.total` counts **jobs** (the owner measured 129 at `count:5`), so there the old rule stays
+  plausible. That route is untouched here. Do not merge the two arithmetics again.
+- **What survives even on the feed:** an entry list that is **empty** next to a candidate reporting
+  `total > 0` still reads as `drift`, `ok=False` (`jobs_parse.read_job_collection`, the `not entries`
+  branch), because zero modules contradict a module count of five just as much. Whether that half should
+  also fall for the feed — a cursor page past the end of the feed looks exactly like this — is an **open
+  owner decision**, not a settled rule: §6 item 9.
+
+The reliable error edge of the feed is the other one: a job branch that is there and a card that does not
+resolve (`state="card_lost"`).
 
 ---
 
 ## 4. What is proven, and how
 
-### 4.0 What the live run added (owner-run, 2026-07-30 against `5a251da`)
+### 4.0 What the live runs added (owner-run)
+
+Two runs, and they prove different kinds of thing. **2026-07-31** contributed a measured **body shape**
+(the three-hop chain of §1.3) — a shape, not a verdict of this code: the parser that reads it has never
+run live, so it produces **no ✅ anywhere**. Its content is written out in §1.3 and is not repeated here.
+**2026-07-30** contributed executed **calls**, and that is what the rest of this subsection is about.
+
+#### 2026-07-30, against commit `5a251da`
 
 This is the **only** live evidence in this document. It covers three things and not a millimetre more.
 
@@ -321,7 +488,9 @@ is not verified usable (`BACKLOG.md`).
   (`test_a_wrapper_without_an_id_does_not_break_a_correct_nested_read`);
 - `empty` only for a container that was read empty (with and without `paging`), `unknown` when
   there is no container, `drift` when the entries carry no identifying id — including a container
-  of URN strings, which is **never** an empty page — or when `paging_total > 0` yields no hits;
+  of URN strings, which is **never** an empty page — or when `paging_total > 0` stands next to an
+  **empty entry list** (`test_paging_total_above_zero_with_no_hits_is_an_error_not_an_empty_list`, whose
+  body carries no entry at all; that is the surviving half of the withdrawn invariant, §3);
 - partial loss is named: `read_entries` / `discarded` balance against the raw container and the
   `reason` says how many entries were dropped;
 - `paging_total` is read from the chosen container only, and a `paginationToken` hanging off a card
@@ -335,9 +504,104 @@ is not verified usable (`BACKLOG.md`).
 `mcp/tests/test_readonly.py` asserts they are on the READ side — unaffected by
 `LINKEDIN_READ_ONLY=1` and ungated.
 
+### 4.2 The feed's three-hop chain — proven offline, and what the green does not reach
+
+Everything here is **offline** evidence for the shape of §1.3: passing tests in
+`mcp/tests/test_jobs_parse.py` (parser) and `mcp/tests/test_client.py` (the tool boundary) against
+`mcp/tests/fixtures/jobs_feed_modules.json`. The fixture's own `_provenance` separates the owner's
+measured values from the synthetic additions. **No live run of this code exists** — see §7.
+
+Held by passing tests:
+
+- **the owner's whole five-module run reads exactly its three job cards**, with title and employer, and
+  the advertising siblings silently skipped
+  (`test_the_measured_five_module_feed_reads_exactly_its_three_job_cards`, and at the tool boundary
+  `test_get_job_recommendations_reads_the_owner_measured_module_feed`);
+- **the withdrawn invariant stays withdrawn**: a promotion-only feed with a `paging.total` is `empty`,
+  `ok=True`, without a `reason` — in the parser and at the tool boundary
+  (`test_a_pure_promotion_feed_with_a_paging_total_is_empty_and_not_an_error`,
+  `test_a_pure_promotion_feed_is_not_an_error_at_the_client_boundary`);
+- **a lost card is an error, not a shorter list**: a wrapper whose `*jobPostingCard` is not in
+  `included[]` is `card_lost`/`ok=False` with nothing invented, a **partial** loss names itself instead
+  of reporting the survivors, and both reach the caller
+  (`test_a_job_branch_whose_card_is_missing_is_a_read_error_not_an_absent_card`,
+  `test_a_partial_card_loss_names_itself_instead_of_reporting_the_survivors`,
+  `test_a_lost_job_card_reaches_the_caller_as_an_error_not_as_a_short_list`);
+- **`jobPostingCard` as a branch of its own is read like the wrapper**
+  (`test_the_bare_job_posting_card_branch_is_read_like_the_wrapper`);
+- **an entity pool that contradicts itself resolves nothing**: two `included[]` entries with the same
+  `entityUrn` are fail-closed, not "the first one"
+  (`test_two_included_entries_with_the_same_entity_urn_are_fail_closed`);
+- **no verdict depends on key order**, module, card and union item permuted — and the union item carries
+  *filled* foreign branches next to the job branch, so "the first filled branch is the type" cannot pass
+  (`test_the_feed_verdict_does_not_depend_on_key_order_in_any_permutation`); the job branch is found at
+  **every position of the full measured 18-branch union**
+  (`test_the_job_branch_is_found_at_every_position_of_the_full_eighteen_branch_union`);
+- **the card's own identity is the only id**: a card whose `preDashNormalizedJobPostingUrn` disagrees
+  with its `entityUrn` is lost, not guessed
+  (`test_a_card_contradicting_itself_about_its_job_id_is_lost_not_guessed`);
+- **`primaryDescription` without the separator is all employer**, location `null`
+  (`test_a_primary_description_without_the_separator_is_all_employer`);
+- **an empty module and a `hide: true` module are silently skipped**
+  (`test_an_empty_module_and_a_hidden_module_are_silently_skipped`); a card without
+  `*jobSeekerJobState` is no error and the field is `null`
+  (`test_a_card_without_a_job_seeker_state_is_no_error`);
+- **a module is recognised by its own URN even without a `$type`**
+  (`test_a_module_is_recognised_without_a_type_by_its_own_urn`) — the `$type` **value** is not
+  owner-measured, so it may not be the load-bearing witness;
+- **the starred entry key needs a collection witness**: a `*elements` list in a node that does not prove
+  it is a collection is not the container, and a node holding *both* entry keys with content is
+  `ambiguous` (`test_a_starred_entry_list_without_a_collection_witness_is_not_a_container`,
+  `test_a_node_holding_both_entry_keys_with_content_is_ambiguous`).
+
+Held by passing tests, added when the losses above were closed:
+
+- **a module wider than the traversal's width cap returns every resolvable card**, because the cap does
+  not apply to it: `_MAX_WIDTH` bounds recursive **discovery** over an unknown body, while a module's
+  `entitiesResolutionResults` is a flat walk over one already-parsed embedded list
+  (`test_a_module_wider_than_the_width_cap_does_not_lose_cards_silently`,
+  `test_a_module_wider_than_fifty_returns_every_resolvable_card`);
+- **a `limit` never cuts cards with a module number**, and whatever it does cut is counted in `dropped`
+  and named in `reason` (`test_the_limit_never_cuts_cards_read_out_of_modules_and_names_what_it_does_cut`,
+  and at the tool boundary `test_the_requested_count_caps_the_request_and_never_silently_cuts_the_read_cards`
+  — the client sends the count to LinkedIn and passes **no** `limit` into the read);
+- **a form that was not understood is `drift`, never a promotion feed**: a drifted container key, a
+  non-object union item and an item with no filled branch each reach `ok=False` with the forms named,
+  and an unread form standing next to a readable card names **both**
+  (`test_a_module_form_that_was_not_understood_is_drift_and_never_a_promotion_feed`,
+  `test_an_unread_form_next_to_a_readable_card_still_names_both`);
+- **a card identity must be the whole URN**: a card URN merely *nested inside* a longer foreign URN is
+  not an identity (`test_a_card_urn_nested_inside_a_foreign_urn_is_not_an_identity`), and an entity that
+  carries the measured container is treated as a **module** even when `$type` and URN prefix drift, so
+  its `trackingUrn` cannot become a card's id
+  (`test_a_feed_entity_never_gets_its_id_from_a_foreign_tracking_urn`,
+  `test_a_feed_entity_whose_container_key_drifted_is_not_projected_by_the_search_route`);
+- **an entry named by the starred list is a module or it is unread — never a card**: an entity resolved
+  out of `*elements` that is not readable as a module never reaches the search projection, whether its
+  job branch sits two levels down or whether it carries no job branch at all and only a `trackingUrn`;
+  both shapes answer `ok=False`, `state="drift"`, `count=0`, and neither the foreign id nor the foreign
+  title appears anywhere in the result
+  (`test_a_referenced_entity_that_is_no_module_never_reaches_the_search_projection`, parametrized over
+  the two shapes). The rule is positive — it asks where the entry **came from**, not what it contains —
+  and the same test file pins that the search route, whose `elements` are inlined, passes the
+  chokepoint untouched (`test_the_chokepoint_leaves_the_search_route_untouched`).
+
+**What the green does not reach.** The chokepoint above closes the foreign-identity class for entries
+that arrive as a **URN string** in the starred list, which is the measured feed shape; it does **not**
+close the class as such. Two reaches are measured by review probes against this tree and are open: an
+entry that stands **inlined as an object inside the starred `*elements` list** still takes the old path,
+and so does a drifted entity in a non-starred `elements` list whose job branch sits deeper than the
+one-level witness looks. Both mint a card id from a foreign `trackingUrn` and report `hits`/`ok=True` —
+§6 item 10, which is why this subsection does not claim the class is closed. `count` on the feed path is
+a closed quantity against every shape listed above, and **not** against a body carrying the same
+`job_id` twice (§6 item 12).
+
 **Not proven, and it matters:**
 
-- **Live evidence covers exactly the three items in §4.0 and nothing else.** Every other statement in
+- **The feed's reading code has never run against LinkedIn.** The 2026-07-31 evidence is a **body**
+  measured by the owner; the parser that reads it is proven against a fixture of that body only. The one
+  call that would settle it is written out in §7.
+- **Live evidence covers exactly the items in §4.0 and nothing else.** Every other statement in
   this document is "the request we would send" and "how we parse a body of that shape". In particular:
   the **id-mismatch abort**, the `ambiguous` / `drift` / `absent` states, every container-selection rule
   and every negative `company`-join case were **not** exercised live.
@@ -347,8 +611,8 @@ is not verified usable (`BACKLOG.md`).
   the fix is a re-capture, not a parser guess.
 - `listed_at`'s unit and the `salaryInsights` shape are **unconfirmed** (the live 200 showed a 13-digit
   integer and a `null` salary — neither documents a unit or a shape). The **container path of the feed
-  body is more open than before, not less**: the live 200 offered no findable container at all, so
-  nothing about where the real container sits was learned.
+  body** is no longer open: the owner measured it on 2026-07-31 (§1.3). What the 07-30 run itself
+  learned about it stays nothing — that body was never kept.
 - The **employer name for a single posting** is joined on the company URN the posting entity itself
   references (`jobs_parse._company_name`, `_referenced_company_names`), and the fixture exercises
   that join through a nested `companyDetails.company` reference. Two different referenced employers
@@ -406,7 +670,10 @@ names hold; what remains open is below.
    handed-back damage picture, so it is listed here and not glossed over. Note that a truncated
    search is *not* the same as "no candidate": a body with **no** candidate at all is `unknown`, and
    only a body that also offers a shallow empty candidate produces the false `empty`. No test pins
-   the limit, and the depth of the real container path is unconfirmed (see the previous section).
+   the limit. **What the 2026-07-31 measurement changes here:** the real feed container sits at
+   `data.data.jobsDashJobsFeedAll` (§1.3), which is inside the depth limit — so for that measured body
+   the depth half of this item does not bite. It stays open because the limit itself is unchanged and
+   nothing pins it, and because the **width** half now has a measured victim of its own (item 7).
 2. **The response root is not on the identity path.** `read_job_posting` reduces the body to its
    `data` node first and collects the identifying ids over that node and the inner one, never over
    the root itself (`mcp/lib/jobs_parse.py`, `read_job_posting`). A job id sitting at an identifying
@@ -452,21 +719,145 @@ names hold; what remains open is below.
    answers 404, or the body-id comparison reports a mismatch — but the returned `url` can be an
    unresolvable link, and a correct read can be aborted.
 
-How to read the state table given items 1 and 3: `empty` now means the container that was read was
-read empty, no candidate found anywhere in the body held entries, and no candidate's `paging.total`
-contradicted it — that much is pinned by tests. The remaining reservation is narrow but real: it
-covers only what the candidate *search* did not reach (item 1) or picked by shape alone (item 3).
-`unknown`, `ambiguous` and `drift` mean exactly what the table says. `hits` names cards that really
-stood in the body, each with a link built from its own id — the open question there is whether the
-container they stood in is the feed. `company` on `get_job` is evidence-joined (see the previous
-section); the live run showed the field filled on one real body, but not which branch filled it, so
-the reference *path* is still unproven against a real body (§4.0 (a)).
+Items 7 to 13 are **new with the feed's three-hop reader** and all of them belong to one class the two
+earlier hand-backs already named: **a quantitative or qualitative reduction that does not name itself.**
+They are listed separately because each sits at a different place in the chain. Items 7, 8 and 11 were
+**closed** in a fix round and are kept here with what closed them, so the class stays visible; item 10
+is **partly** closed — its measured shape is held by a chokepoint, two drifted shapes are not — and 12
+and 13 are open. Everything called open here is measured by a review probe against this tree, and the
+probe's answer is quoted with it.
 
-**Items 1 and 3 were expected to be settled by a live feed call. They were not.** The owner's live run
-did execute the feed route, but the 200 it returned offered **no findable container at all** (§4.0 (c)),
-so neither the depth of the real container path nor the presence of a second, filled rail next to it was
-observed. Both items stay open exactly as written, and what they now additionally wait on is the **raw
-body** of that 200 — which is the same artifact the endpoint itself waits on.
+7. **CLOSED — a module wider than the traversal's width cap lost resolvable cards silently.**
+   `_feed_module_cards` walked `entitiesResolutionResults[:_MAX_WIDTH]`, so the surplus entries of a
+   wider module were dropped with `ok=True`, `lost=0`, `reason=None`. **Closed by removing the cap from
+   this walk** (`mcp/lib/jobs_parse.py:1122`, in `_feed_module_cards`, with the reason in its docstring
+   at `:1109-1111`): `_MAX_WIDTH`
+   (`mcp/lib/jobs_parse.py:126`) bounds the recursive **discovery** over an unknown body, not a flat walk
+   over one already-parsed, measured list. Two tests hold it (§4.2). Kept here because the reasoning
+   generalises: a bound written for a search is not a bound for a read.
+8. **CLOSED — the `limit` cut on the feed path counted modules, not cards.**
+   `read_job_collection(raw, limit=n)` was called with the same `n` the client sent to LinkedIn as the
+   page size, and that `n` is a **module** count on this route (§1.3), while the cut applied it to
+   **cards** — five modules of three cards returned five cards with a balance that looked closed over
+   ten dropped ones, unreachable by cursor paging. **Closed on both sides**: the client no longer passes
+   a `limit` into the read at all (`mcp/lib/client.py:541`, in `get_job_recommendations`), and the cut
+   that remains for a caller who does pass one is bound to entries that are **not** modules and counts
+   what it cuts in `dropped`, naming it in `reason` (`mcp/lib/jobs_parse.py:1308-1312`, in
+   `read_job_collection`). Two tests hold it (§4.2).
+9. **The surviving half of the withdrawn invariant is an owner decision, not a settled rule.** An empty
+   entry list next to a candidate reporting `total > 0` still reads `drift`, `ok=False`
+   (`mcp/lib/jobs_parse.py`, `read_job_collection`, the `not entries` branch), and two tests pin it
+   (`test_paging_total_above_zero_with_no_hits_is_an_error_not_an_empty_list`, and at the tool boundary
+   `test_get_job_recommendations_never_reports_a_silent_zero_for_a_full_page`). On the **feed** that
+   shape has a plausible innocent cause: a cursor page **past the end** of the feed carries no module
+   while `total` still counts the modules of the whole feed. The reading code's justification ("drift on
+   either route") is written for two routes, but `read_job_collection` has exactly one caller today —
+   the feed. **Decision needed:** withdraw this half for the feed as well (then it becomes `empty`), or
+   keep it deliberately as a feed special case. Until then this document does not claim it is right; it
+   claims only what the two tests hold, which is the current behaviour.
+10. **PARTLY CLOSED, and still the sharpest item on this list — an entry that is not recognised as a
+    module can be projected by the SEARCH projection into a card with a FOREIGN id.**
+    `read_job_collection` hands a non-module dict to `project_job_card`
+    (`mcp/lib/jobs_parse.py:1272`, in `read_job_collection`), which reads the job id at the search
+    route's identifying positions (`_ID_URN_KEYS`, `mcp/lib/jobs_parse.py:112`, e.g. `trackingUrn`). The
+    entity that *contains* the real cards is then itself projected into a card whose `job_id` and `url`
+    come from a **different** position than a JobPostingCard's own `entityUrn`, reported as
+    `hits`/`ok=True`, while the real cards inside it go unread.
+    **What is closed, and closed at a chokepoint rather than by another witness:** an entry that arrived
+    as a **URN string** in the starred entry list `*elements` is, by where it came from, a name for a
+    module — so if it does not read as one it is `unread` and never projected
+    (`mcp/lib/jobs_parse.py:1253-1264`, in `read_job_collection`, keyed on `from_reference` at `:1234`).
+    The rule is positive and does not ask what the entity contains, so it cannot be out-drifted one
+    level deeper. Review probes against this tree, both shapes: a drifted entity with
+    `trackingUrn: urn:li:jobPosting:7777777` and a resolvable `jobPostingCardWrapper` **two** levels
+    down, and the same entity with no job branch at all, each answer `ok=False`, `state="drift"`,
+    `count=0`, `unread=1`, with neither the foreign id nor the foreign title anywhere in the result.
+    A parametrized test pins both, and a second test pins that the search route — whose `elements` are
+    inlined, never URN strings — is untouched by the rule (§4.2). Two earlier, instance-level defences
+    still stand underneath it: the anchored `_CARD_URN_RE` (`mcp/lib/jobs_parse.py:153`) and
+    `is_feed_card_module` recognising a module by the measured container key even when `$type` and URN
+    prefix drift.
+    **What is NOT closed** — the chokepoint is keyed on the entry's runtime type (a URN string), not on
+    the starred container key, so two reaches remain, both measured by a review probe against this tree
+    and neither pinned by a test:
+    (a) an **object standing directly inside the starred `*elements` list** (instead of the measured URN
+    string): the same drifted entity answers `ok=True`, `state="hits"`, one result with `job_id 7777777`
+    and the foreign title, and the real card inside it falls away silently. In a **mixed** list — one
+    real module URN plus that object — the answer is `ok=True`, `state="hits"`, two results, the foreign
+    identity standing next to a correctly read card with nothing marking the difference. That is the
+    worse of the two, because a caller sees a plausible page.
+    (b) the same drifted entity in a **non-starred, inlined `elements` list**, with its job branch
+    deeper than the one-level `carries_a_job_branch` witness looks (`mcp/lib/jobs_parse.py:974`,
+    consulted at `:1266`): `ok=True`, `state="hits"`, `job_id 7777777`. This one is **not** new with this
+    reader — the same body answers the same way on the baseline parser — and it is the search route's
+    projection semantics, which this ticket's scope forbids touching. It is written down here so it is
+    not rediscovered as a regression.
+    Nothing in either reach is triggered by the owner's measured body; both are what a drifted body
+    would produce.
+    **What would close reach (a)** is the same rule expressed one step more positively: the signal is
+    the **starred container key**, which the reader already computes (`container_entry_keys`,
+    `mcp/lib/jobs_parse.py:585`), so an entry from a starred list is a feed entry regardless of whether
+    it arrived as a URN or inlined. Reach (b) is an owner decision about the **search** route and does
+    not belong in a feed change.
+11. **CLOSED — `skipped` counted shapes that were not understood as "understood and job-free".** Three
+    of them reached `state="empty"`, `ok=True`, `reason=None`: a module whose owner-measured
+    `entitiesResolutionResults` key is **missing or not a list**, a union item that is not an object,
+    and a union item with **no** filled branch at all. **Closed by giving them their own level**: they
+    are counted in `unread` and reported as `state="drift"`, `ok=False`, with the forms named in
+    `reason` (`mcp/lib/jobs_parse.py:1118-1128`, in `_feed_module_cards`; the verdict in
+    `read_job_collection`) — see §2, "the three levels". The boundary that was never in question stayed
+    put: silence toward an **unknown branch name** is correct and deliberate (§1.3); it was silence
+    toward a missing **container key** that this item was about.
+12. **Collapsed duplicates have no counter on the feed either, and the `card_lost` arithmetic can
+    disagree with itself.** The same `job_id` in two modules (plausible: a "top jobs" rail and a
+    "jump back in" rail) is dropped without a counter and without a `reason`, so "duplicate collapsed"
+    is not distinguishable from "card lost"; and when a loss and a collapse meet, the `reason`'s own
+    numbers ("N of M job cards … so count=X is INCOMPLETE") do not add up to `count`. Measured by a
+    **review probe; no test pins it** — two modules naming the same card answer `count: 1`,
+    `read_entries: 2`, `skipped: 0`, `lost: 0`, `discarded: 0`, `reason: None`. This is item 4 of this
+    list on the feed path — the same unexplained gap in `read_entries - discarded == count`. The
+    balance **guard** added since (§2) does account for duplicates, which is why the shortening is at
+    least not silent to the parser itself; what is missing is that the guard's subtrahend is not a
+    published key, so it is not visible to the caller. Cheapest honest fix: return the count it already
+    computes.
+13. **OPEN — a failed hop A is not fail-closed, and its `reason` names the wrong cause.** The
+    fail-closed rule was built for hop B (a `*jobPostingCard` that does not resolve). At hop A — the
+    module URN out of `*elements` — the resolution **reason** is computed and then discarded
+    (`mcp/lib/jobs_parse.py:1236`, in `read_job_collection`, where `_why` distinguishes "unresolved"
+    from "ambiguous" and is dropped). Two review probes against this tree: a module URN that is not in
+    `included[]`, standing next to a readable module, answers `ok: True`, `state: "hits"`,
+    `discarded: 1` with the reason "no identifying job id at a readable position" — and behind that one
+    lost entry can stand a whole module of job cards (module 0 of the owner's run carried three). Two
+    `included[]` entries with the same **module** `entityUrn` answer the same way. So the ticket's
+    fail-closed requirement for a duplicated `entityUrn` is met for the **card** URN (`card_lost`,
+    `ok=False`, pinned by a test) and **not** for the module URN. Note this is not a wrong card — no
+    foreign id is minted — it is a lost module reported as a projection failure. **Decision needed:**
+    carry hop A's failure into `unread`/`lost` (then it is `ok=False`, consistent with §2), or leave it
+    at `ok=True` and rewrite the `reason` to name the real cause. Either way the discarded `_why` is the
+    fix's starting point.
+
+How to read the state table given this list. `unknown` and `ambiguous` mean exactly what the table says.
+`empty` means the container that was read was read empty (or every entry was read and carried no job),
+and no candidate's `paging.total` contradicted it — pinned by tests, with two reservations that are
+narrow but real: what the candidate *search* did not reach (item 1) or picked by shape alone (item 3).
+The three not-understood module shapes no longer arrive here at all (item 11). `drift` means what the
+table says and now covers the unread forms and the balance guard too (§2), with item 9 as an open
+question about one of its triggers, not about the state. `card_lost` is the feed's reliable error edge
+at hop **B** and is pinned by tests; at hop **A** there is no such edge (item 13). `hits` names cards
+that really stood in the body, each with a link built from its **own** `entityUrn` — with the two
+exceptions that keep item 10 open, an unrecognised entity minting an id from a foreign position when it
+stands **inlined** in the starred list or in a non-starred one. An entry that the starred list names by
+URN can no longer do this. `count`
+is closed against every shape §4.2 lists and **not** against a body naming the same card twice
+(item 12). `company` on `get_job` is evidence-joined (see §4.1); on a **feed** card it is the first half
+of one measured string and there is nothing to join (§1.3).
+
+**What a live feed call would and would not settle now.** Items 1 and 3 were expected to be settled by
+the 2026-07-30 call and were not — that 200 offered no findable container and its body was not kept
+(§4.0). The owner's 2026-07-31 measurement settles the **shape** question they were waiting on (§1.3),
+so what is left for a live call is a different thing: whether **this reader** produces on a real body
+what it produces on the fixture. Items 7 to 13 are not waiting on any call — they are decisions and
+fixes in this repo, and none of them needs LinkedIn to be answered.
 
 ---
 
@@ -475,20 +866,30 @@ body** of that 200 — which is the same artifact the endpoint itself waits on.
 **This section is no longer a proposal for `get_job`.** The owner ran both tools on 2026-07-30 against
 `5a251da`; the results are in §4.0, the provenance rule in `STATUS-MATRIX.md`. Outcome in one line:
 `get_job` is verified on the 200 and the 404 path, the feed route answered 200 but read as
-`state: "unknown"`, so the recommendations **endpoint** and open items 1 and 3 are **not** settled.
+`state: "unknown"`, so the recommendations **endpoint** was not settled then.
 
-What is still needed, and it is no longer a plain live call:
+**The three-hop reader has never met LinkedIn.** It was written from the owner's 2026-07-31 measurement
+of a body and is proven against a fixture of that body (§4.2). No session existed in the sessions that
+wrote it, and an outward call is not theirs to make — so this is a decision sheet, not a result:
 
-- **What:** re-run `get_job_recommendations(3)` and **keep the raw response body** of the 200 (the tool
-  deliberately never returns bodies, so this has to come from a capture — `tools/crawl_recursive.py`)
-  or capture the jobs feed request from the real client again.
-- **What it would prove:** which container key the real body carries (or that it carries none, or that a
-  200 arrived with an in-band error, or that the feed is empty / not entitled) — the one fact that
-  decides whether the endpoint is usable and that settles open items 1 and 3 for a real body.
+- **What:** run `get_job_recommendations(count=5)` once, in the owner's own session, against
+  `voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815` — the same call he measured.
+- **What it would prove:** whether `state`, `count`, `skipped`, `lost`, `unread` and the card titles
+  come out of a **real** body the way they come out of the fixture. That, and only that, turns the
+  feed's form from 🔍 into a verified read. It says nothing about what is still open in §6 — the two
+  reaches item 10 keeps, item 12 and item 13 — which are decisions here.
+- **What can go wrong:** the `queryId` hash rotates with LinkedIn deployments; a rotated hash answers
+  4xx and the tool reports the queryId-rotation branch with the re-capture hint. No side effect either
+  way.
 - **Risk:** a GET on the owner's own account — nothing is created, changed or deleted. Residual risk is
-  the usual one of any authenticated read (rate limiting / session wear), plus the handling rule that a
-  captured body must be treated as private data and must never be committed.
+  the usual one of any authenticated read (rate limiting / session wear).
 - **Cost:** one request.
+
+**Still worth having in the same session, and cheap:** **keep the raw response body** of that 200 via
+`tools/crawl_recursive.py` (the tool deliberately never returns bodies). It is the artifact that would
+show whether the measured shape is stable and whether a second, filled rail sits beside the feed
+container (§6 item 3). **Handling:** a captured feed body is private data — never commit it
+(`.gitignore` already excludes `_captures*/`), and strip it before any of it reaches a doc.
 
 **Not part of this and still unexecuted: the SDUI header question** (minimal headers vs. vgreq's Voyager
 headers). It is a **write**, so it needs the owner's explicit go; the one-variable call is written out in

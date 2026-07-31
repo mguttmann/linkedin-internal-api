@@ -1,0 +1,167 @@
+{
+  "_provenance": {
+    "form": "OWNER-MEASURED (owner-run 2026-07-31, count:5, queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815). The three-hop chain data.data.jobsDashJobsFeedAll.*elements -> JobsFeedCardModule.entitiesResolutionResults[] -> <union branch> -> *jobPostingCard -> JobPostingCard, the module key set, the 18 union branch names, the module table (5 modules: VERTICAL_LIST/3, VERTICAL_LIST/0, SINGLE upsell, SINGLE promotion, TABBED/4), the JobPostingCard key set and the values of card 4441501850 (title, primaryDescription, entityUrn, secondary/tertiaryDescription null, *jobSeekerJobState).",
+    "owner_measured_values": "Card 4441501850: title, primaryDescription and entityUrn are the owner's own live values — public job-posting data, no PII of a private person.",
+    "synthetic_additions": "Cards 4441501851 and 4441501852 (ids, titles, employers, locations) are SYNTHETIC, added so the measured three-card module has all three of its entries. Every `$type` class name is SYNTHETIC (the owner measured that the key exists, not its value) — the parser therefore also recognises a module/card by its URN alone. The module uuids, the paginationToken, the upsell/promotion target URNs and the tabbedCollection bodies are SYNTHETIC. The `{\"text\": ...}` wrapper around title/header.title is SYNTHETIC (the owner reported the resolved strings); the parser accepts a bare string as well.",
+    "abbreviated": "Only the FIRST item of module 0 spells out all 18 measured union branches. The other items carry their filled branch plus the second job branch as null, which is an abbreviation of the same shape, not a different one.",
+    "not_live_tested": "That this parser reads this form is proven OFFLINE only. 🔍 owner-run form, no ✅."
+  },
+  "data": {
+    "data": {
+      "$type": "com.linkedin.restli.common.CollectionResponse",
+      "jobsDashJobsFeedAll": {
+        "$type": "com.linkedin.restli.common.CollectionResponse",
+        "*elements": [
+          "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000000)",
+          "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000001)",
+          "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000002)",
+          "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000003)",
+          "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000004)"
+        ],
+        "paging": {"count": 5, "start": 0, "total": 5},
+        "metadata": {"paginationToken": "SYNTHETIC_PAGINATION_TOKEN"}
+      }
+    }
+  },
+  "included": [
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+      "entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000000)",
+      "hide": false,
+      "moduleType": "VERTICAL_LIST",
+      "header": {"title": {"text": "Top-Jobs für Sie"}},
+      "footer": null,
+      "$recipeTypes": ["com.linkedin.f9a9ff8ff8ff8ff8ff8ff8ff8ff8ff8f"],
+      "entitiesResolutionResults": [
+        {
+          "endOfResultsCard": null,
+          "jobPostingCardWrapper": {
+            "*jobPostingCard": "urn:li:fsd_jobPostingCard:(4441501850,JOBS_HOME_JYMBII)"
+          },
+          "jobSearchHistoryCard": null,
+          "jobSearchSuggestion": null,
+          "premiumUpsellSlot": null,
+          "seekerNextBestActionComponent": null,
+          "carouselEntityHighlightCard": null,
+          "feedbackCard": null,
+          "newCollectionHeaderCard": null,
+          "carouselCollectionCard": null,
+          "careerEnrichmentCard": null,
+          "tabbedCollection": null,
+          "noResultsCard": null,
+          "seeAllCard": null,
+          "*promotionalCard": null,
+          "refreshStateCard": null,
+          "jobPostingCard": null,
+          "jumpBackInCard": null
+        },
+        {
+          "jobPostingCardWrapper": {
+            "*jobPostingCard": "urn:li:fsd_jobPostingCard:(4441501851,JOBS_HOME_JYMBII)"
+          },
+          "jobPostingCard": null,
+          "*promotionalCard": null
+        },
+        {
+          "jobPostingCardWrapper": {
+            "*jobPostingCard": "urn:li:fsd_jobPostingCard:(4441501852,JOBS_HOME_JYMBII)"
+          },
+          "jobPostingCard": null,
+          "tabbedCollection": null
+        }
+      ]
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+      "entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000001)",
+      "hide": false,
+      "moduleType": "VERTICAL_LIST",
+      "header": null,
+      "footer": null,
+      "entitiesResolutionResults": []
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+      "entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000002)",
+      "hide": false,
+      "moduleType": "SINGLE",
+      "header": null,
+      "footer": null,
+      "entitiesResolutionResults": [
+        {
+          "jobPostingCardWrapper": null,
+          "jobPostingCard": null,
+          "*premiumUpsellSlot": "urn:li:fsd_premiumUpsellSlot:SYNTHETIC_UPSELL"
+        }
+      ]
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+      "entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000003)",
+      "hide": false,
+      "moduleType": "SINGLE",
+      "header": null,
+      "footer": null,
+      "entitiesResolutionResults": [
+        {
+          "jobPostingCardWrapper": null,
+          "jobPostingCard": null,
+          "*promotionalCard": "urn:li:fsd_promotionalCard:SYNTHETIC_PROMO"
+        }
+      ]
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+      "entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,00000000-0000-4000-8000-000000000004)",
+      "hide": false,
+      "moduleType": "TABBED",
+      "header": {"title": {"text": "Erkunden Sie Jobsammlungen"}},
+      "footer": null,
+      "entitiesResolutionResults": [
+        {"jobPostingCardWrapper": null, "tabbedCollection": {"title": {"text": "Synthetic collection A"}}},
+        {"jobPostingCardWrapper": null, "tabbedCollection": {"title": {"text": "Synthetic collection B"}}},
+        {"jobPostingCardWrapper": null, "tabbedCollection": {"title": {"text": "Synthetic collection C"}}},
+        {"jobPostingCardWrapper": null, "tabbedCollection": {"title": {"text": "Synthetic collection D"}}}
+      ]
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+      "entityUrn": "urn:li:fsd_jobPostingCard:(4441501850,JOBS_HOME_JYMBII)",
+      "preDashNormalizedJobPostingUrn": "urn:li:fs_normalized_jobPosting:4441501850",
+      "title": {"text": "Leitung IT/Systemadministration (w/m/d)"},
+      "primaryDescription": {"text": "Universum Managementges. mbH · Bremen, Deutschland (Vor Ort)"},
+      "secondaryDescription": null,
+      "tertiaryDescription": null,
+      "*jobSeekerJobState": "urn:li:fsd_jobSeekerJobState:4441501850",
+      "footerItems": [],
+      "primaryActions": [],
+      "jobInsightsV2ResolutionResults": [],
+      "relevanceInsight": null,
+      "logo": null,
+      "debugInfo": null
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+      "entityUrn": "urn:li:fsd_jobPostingCard:(4441501851,JOBS_HOME_JYMBII)",
+      "preDashNormalizedJobPostingUrn": "urn:li:fs_normalized_jobPosting:4441501851",
+      "title": {"text": "Synthetic Platform Engineer"},
+      "primaryDescription": {"text": "Synthetic Employer GmbH · Sample City, Sample Region (Hybrid)"},
+      "secondaryDescription": null,
+      "tertiaryDescription": null,
+      "footerItems": [],
+      "primaryActions": [],
+      "logo": null
+    },
+    {
+      "$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+      "entityUrn": "urn:li:fsd_jobPostingCard:(4441501852,JOBS_HOME_JYMBII)",
+      "preDashNormalizedJobPostingUrn": "urn:li:fs_normalized_jobPosting:4441501852",
+      "title": "Synthetic Site Reliability Engineer",
+      "primaryDescription": {"text": "Synthetic Employer Without A Location"},
+      "secondaryDescription": null,
+      "tertiaryDescription": null,
+      "footerItems": [],
+      "logo": null
+    }
+  ]
+}

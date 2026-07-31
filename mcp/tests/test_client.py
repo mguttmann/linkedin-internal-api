@@ -921,14 +921,19 @@ def test_get_job_recommendations_uses_the_captured_feed_query():
     assert res["results"][0]["url"] == "https://www.linkedin.com/jobs/view/1111111111/"
 
 
-def test_get_job_recommendations_applies_the_requested_count():
-    # HARDENING (tester). The parser takes a limit; that the CLIENT hands the requested count down
-    # is a separate claim. Unproven, a 50-card page would blow the agent's context window.
-    li, _ = _reading_client(_feed_fixture())
+def test_the_requested_count_caps_the_request_and_never_silently_cuts_the_read_cards():
+    # HARDENING (tester), corrected to the measured chain: `count:<n>` caps the MODULES LinkedIn
+    # returns, and one module carries several cards, so cutting the CARD list to `n` locally would
+    # drop understood jobs that cursor paging can never bring back. The cap therefore lives in the
+    # REQUEST (asserted above), not in the result list — and if anything ever does cut the list, it
+    # is counted in `dropped` instead of vanishing.
+    li, calls = _reading_client(_feed_fixture())
     res = li.get_job_recommendations(1)
+    assert "variables=(count:1,start:0)" in calls["get"][-1], "the cap goes to the server"
     assert res["ok"] is True and res["state"] == "hits"
-    assert res["count"] == 1 and len(res["results"]) == 1
-    assert res["paging_total"] == 3, "the server-side total stays visible next to the capped list"
+    assert res["count"] == len(res["results"]) == 3, "every read card is returned, none cut away"
+    assert res["dropped"] == 0 and res["requested_count"] == 1
+    assert res["paging_total"] == 3, "the server-side total stays visible next to the list"
 
 
 def test_get_job_applies_the_requested_description_budget():
@@ -982,6 +987,56 @@ def test_get_job_recommendations_never_reports_a_silent_zero_for_a_full_page():
     li, _ = _reading_client({"data": {"elements": [], "paging": {"total": 3}}})
     drift = li.get_job_recommendations(20)
     assert drift["ok"] is False and drift["state"] == "drift" and drift["results"] == []
+
+
+def test_get_job_recommendations_reads_the_owner_measured_module_feed():
+    # The three-hop chain at the CLIENT boundary (owner-run 2026-07-31): the feed's entries are
+    # jobs-feed MODULES, and only three of the five carry a job card. That the module/skip/loss
+    # counters actually reach the caller is a separate claim from the parser's.
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "jobs_feed_modules.json"),
+              "r", encoding="utf-8") as fh:
+        body = json.load(fh)
+    li, _ = _reading_client(body)
+    res = li.get_job_recommendations(20)
+    assert res["ok"] is True and res["state"] == "hits" and res["count"] == 3
+    assert res["read_entries"] == 5 and res["skipped"] == 4 and res["lost"] == 0
+    assert res["paging_total"] == 5, "paging.total counts MODULES on this route, not jobs"
+    assert res["results"][0]["job_id"] == "4441501850"
+    assert res["results"][0]["company"] == "Universum Managementges. mbH"
+
+
+def test_a_pure_promotion_feed_is_not_an_error_at_the_client_boundary():
+    # THE WITHDRAWN INVARIANT: 'paging.total > 0 with count 0 is an error' is FALSE on the feed
+    # route, because `total` counts modules. A promotion-only feed must reach the agent as an
+    # honest empty page — no `error`, ok=True — or the scout learns to distrust the field.
+    module = {"entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,aaa)",
+              "hide": False, "moduleType": "SINGLE",
+              "entitiesResolutionResults": [{"jobPostingCardWrapper": None,
+                                             "*promotionalCard": "urn:li:fsd_promotionalCard:X"}]}
+    body = {"data": {"data": {"jobsDashJobsFeedAll": {
+        "*elements": [module["entityUrn"]], "paging": {"count": 5, "start": 0, "total": 5}}}},
+        "included": [module]}
+    li, _ = _reading_client(body)
+    res = li.get_job_recommendations(5)
+    assert res["ok"] is True and res["state"] == "empty" and res["count"] == 0
+    assert res["paging_total"] == 5 and res["skipped"] == 1 and res["lost"] == 0
+    assert "error" not in res, "an expectable promotion feed is not a read error"
+
+
+def test_a_lost_job_card_reaches_the_caller_as_an_error_not_as_a_short_list():
+    # The other side of the same coin: a wrapper WAS there and its card did not resolve. ok=False
+    # plus the counts — never a quietly shorter `results`.
+    module = {"entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,aaa)",
+              "hide": False, "moduleType": "VERTICAL_LIST",
+              "entitiesResolutionResults": [{"jobPostingCardWrapper": {
+                  "*jobPostingCard": "urn:li:fsd_jobPostingCard:(4441501850,JOBS_HOME_JYMBII)"}}]}
+    body = {"data": {"data": {"jobsDashJobsFeedAll": {
+        "*elements": [module["entityUrn"]], "paging": {"count": 5, "start": 0, "total": 1}}}},
+        "included": [module]}
+    li, _ = _reading_client(body)
+    res = li.get_job_recommendations(5)
+    assert res["ok"] is False and res["state"] == "card_lost" and res["results"] == []
+    assert res["lost"] == 1 and "re-capture" in res["error"]
 
 
 def test_get_job_recommendations_is_honest_on_a_graphql_error_with_200():

@@ -1,8 +1,12 @@
 """test_jobs_parse.py — offline tests for the pure Jobs parsers (mcp/lib/jobs_parse.py).
 
-No network, no cookie file, no browser: every test runs against SYNTHETIC, PII-free fixtures
-(mcp/tests/fixtures/job_posting.json, jobs_feed.json) or against small inline objects. The
-fixtures prove the PARSER's logic — they are NOT evidence about LinkedIn's real response form.
+No network, no cookie file, no browser: every test runs against PII-free fixtures
+(mcp/tests/fixtures/job_posting.json, jobs_feed.json, jobs_feed_modules.json) or against small
+inline objects. job_posting.json and jobs_feed.json are SYNTHETIC and prove the PARSER's logic
+only — they are no evidence about LinkedIn's real response form. jobs_feed_modules.json reproduces
+the FORM the owner measured live (owner-run 2026-07-31), field by field, and says in its
+`_provenance` which values are his and which were added synthetically. That the parser reads that
+form is proven OFFLINE here; the read itself is not live-tested (🔍, never ✅).
 
 Three defect CLASSES from the handed-back attempt are pinned here, each with the failure it
 produced:
@@ -500,6 +504,10 @@ def test_no_container_means_unknown_never_empty(raw):
 
 
 def test_paging_total_above_zero_with_no_hits_is_an_error_not_an_empty_list():
+    # THE SURVIVING HALF of the invariant that was withdrawn for the feed: it holds for an EMPTY
+    # ENTRY LIST (no entry at all next to a server-side total), on either route. It does NOT hold
+    # for zero JOB CARDS behind a non-empty list of modules — see
+    # test_a_pure_promotion_feed_with_a_paging_total_is_empty_and_not_an_error.
     raw = {"data": {"elements": [], "paging": {"count": 20, "start": 0, "total": 42}}}
     read = jp.read_job_collection(raw)
     assert read["ok"] is False and read["state"] == "drift" and read["results"] == []
@@ -663,3 +671,453 @@ def test_inband_error_catches_both_error_envelopes(raw, fragment):
 ])
 def test_inband_error_stays_quiet_on_a_clean_body(raw):
     assert jp.inband_error(raw) is None
+
+
+# ── module rule 5: the feed is THREE hops and `*elements` points at MODULES ──
+# Every shape below reproduces the owner's live measurement (owner-run 2026-07-31, count:5,
+# queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815): the chain
+# `*elements` -> JobsFeedCardModule.entitiesResolutionResults[] -> <one filled union branch> ->
+# `*jobPostingCard` -> JobPostingCard. The class names in `$type` are synthetic (the owner measured
+# that the key exists, not its value), which is why a module is also recognised by its URN alone.
+_COLL = "com.linkedin.restli.common.CollectionResponse"
+_CARD_URN = "urn:li:fsd_jobPostingCard:({0},JOBS_HOME_JYMBII)"
+_RESULTS = "entitiesResolutionResults"
+# All 18 union branch keys, verbatim from the owner's measurement — used to prove that the filled
+# branch is found at ANY position, not just where a sample of three happens to put it.
+_UNION_BRANCHES = ("endOfResultsCard", "jobPostingCardWrapper", "jobSearchHistoryCard",
+                   "jobSearchSuggestion", "premiumUpsellSlot", "seekerNextBestActionComponent",
+                   "carouselEntityHighlightCard", "feedbackCard", "newCollectionHeaderCard",
+                   "carouselCollectionCard", "careerEnrichmentCard", "tabbedCollection",
+                   "noResultsCard", "seeAllCard", "*promotionalCard", "refreshStateCard",
+                   "jobPostingCard", "jumpBackInCard")
+
+
+def _feed_card(job_id, **extra):
+    """A JobPostingCard as measured: identity in the tuple entityUrn, the text ON the card."""
+    card = {"$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+            "entityUrn": f"urn:li:fsd_jobPostingCard:({job_id},JOBS_HOME_JYMBII)",
+            "title": {"text": f"A Job {job_id}"},
+            "primaryDescription": {"text": "An Employer GmbH · A City, A Country (Vor Ort)"}}
+    card.update(extra)
+    return card
+
+
+def _wrap(job_id, key="jobPostingCardWrapper"):
+    """One union item whose ONLY filled branch is a job branch referencing a card."""
+    return {key: {"*jobPostingCard": f"urn:li:fsd_jobPostingCard:({job_id},JOBS_HOME_JYMBII)"},
+            "endOfResultsCard": None, "tabbedCollection": None, "*promotionalCard": None}
+
+
+def _module(tail, items, **extra):
+    module = {"$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+              "entityUrn": f"urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,{tail})",
+              "hide": False, "moduleType": "VERTICAL_LIST", "header": None,
+              "entitiesResolutionResults": items}
+    module.update(extra)
+    return module
+
+
+def _feed_body(modules, cards, total=None):
+    """The measured envelope: data.data.<alias> with a STARRED entry list of module URNs."""
+    node = {"$type": _COLL, "*elements": [m["entityUrn"] for m in modules],
+            "paging": {"count": len(modules), "start": 0,
+                       "total": len(modules) if total is None else total}}
+    return {"data": {"data": {"jobsDashJobsFeedAll": node}}, "included": [*modules, *cards]}
+
+
+def test_the_measured_five_module_feed_reads_exactly_its_three_job_cards():
+    # The owner's whole run, as a fixture: 3 job cards, one empty module, one upsell, one promotion
+    # and four TABBED collections. The advertising siblings are silently skipped — they are neither
+    # a value nor an error — and the three cards come out with title and employer.
+    read = jp.read_job_collection(_fixture("jobs_feed_modules.json"))
+    assert (read["ok"], read["state"], read["count"]) == (True, "hits", 3)
+    # four of the five modules carry no job at all: the empty one, the upsell, the promotion, TABBED
+    assert read["read_entries"] == 5 and read["skipped"] == 4 and read["lost"] == 0
+    assert read["discarded"] == 0, "an upsell or a TABBED module is not an unreadable entry"
+    assert read["paging_total"] == 5, "paging.total counts MODULES on the feed, not job cards"
+    assert read["pagination_token"] == "SYNTHETIC_PAGINATION_TOKEN"
+    first = read["results"][0]
+    assert first["job_id"] == "4441501850"
+    assert first["url"] == "https://www.linkedin.com/jobs/view/4441501850/"
+    assert first["title"] == "Leitung IT/Systemadministration (w/m/d)"
+    assert first["company"] == "Universum Managementges. mbH"
+    assert first["location"] == "Bremen, Deutschland (Vor Ort)"
+    assert first["module_type"] == "VERTICAL_LIST" and first["module_title"] == "Top-Jobs für Sie"
+    assert first["job_seeker_job_state_urn"] == "urn:li:fsd_jobSeekerJobState:4441501850"
+    assert first["reposted"] is None and first["salary"] is None, "unknown is not False"
+    assert first["remote_allowed"] is None, "'(Vor Ort)' in prose is not a measured flag"
+    assert [c["job_id"] for c in read["results"]] == ["4441501850", "4441501851", "4441501852"]
+    assert read["results"][2]["title"] == "Synthetic Site Reliability Engineer", "bare string title"
+
+
+def test_a_pure_promotion_feed_with_a_paging_total_is_empty_and_not_an_error():
+    # THE WITHDRAWN INVARIANT, and this test is what holds it back: 'paging.total > 0 with no items
+    # is an error' is FALSE for the feed, because `total` counts MODULES. Two promotional modules
+    # next to total=2 are a legitimately job-free feed, not a lost read.
+    modules = [_module("aaa", [{"jobPostingCardWrapper": None, "jobPostingCard": None,
+                               "*premiumUpsellSlot": "urn:li:fsd_premiumUpsellSlot:X"}],
+                       moduleType="SINGLE"),
+               _module("bbb", [{"jobPostingCardWrapper": None, "jobPostingCard": None,
+                               "*promotionalCard": "urn:li:fsd_promotionalCard:Y"}],
+                       moduleType="SINGLE")]
+    read = jp.read_job_collection(_feed_body(modules, []))
+    assert (read["ok"], read["state"], read["count"]) == (True, "empty", 0)
+    assert read["paging_total"] == 2 and read["read_entries"] == 2
+    assert read["skipped"] == 2 and read["lost"] == 0 and read["discarded"] == 0
+    assert read["reason"] is None, "an expectable promotion feed is no finding"
+
+
+def test_a_job_branch_whose_card_is_missing_is_a_read_error_not_an_absent_card():
+    # The one reliable error edge of the feed: the wrapper IS there, so a card exists — and it does
+    # not resolve in included[]. Fail-closed, and nothing is invented to fill the gap.
+    read = jp.read_job_collection(_feed_body([_module("aaa", [_wrap("4441501850")])], []))
+    assert read["ok"] is False and read["state"] == "card_lost"
+    assert read["results"] == [] and read["count"] == 0 and read["lost"] == 1
+    assert read["state"] != "empty" and "re-capture" in read["reason"]
+    assert "unresolved" in read["reason"] and "jobPostingCardWrapper" in read["reason"]
+
+
+def test_a_partial_card_loss_names_itself_instead_of_reporting_the_survivors():
+    # Three wrappers, one card missing. Returning two cards without a word is the quantitative
+    # claim the read does not support — the loss has to have a NAME.
+    module = _module("aaa", [_wrap("4441501850"), _wrap("4441501851"), _wrap("4441501852")])
+    read = jp.read_job_collection(_feed_body([module], [_feed_card("4441501850"),
+                                                        _feed_card("4441501852")]))
+    assert read["ok"] is False and read["state"] == "card_lost"
+    assert read["lost"] == 1 and read["count"] == 2
+    assert "1 of 3" in read["reason"] and "INCOMPLETE" in read["reason"]
+    assert [c["job_id"] for c in read["results"]] == ["4441501850", "4441501852"]
+
+
+def test_the_bare_job_posting_card_branch_is_read_like_the_wrapper():
+    # `jobPostingCard` is a union branch of its OWN, next to `jobPostingCardWrapper`. It was null
+    # throughout the measured run; the parser knows it anyway — as a reference and embedded.
+    referencing = _module("aaa", [_wrap("4441501850", key="jobPostingCard")])
+    read = jp.read_job_collection(_feed_body([referencing], [_feed_card("4441501850")]))
+    assert (read["ok"], read["state"], read["count"]) == (True, "hits", 1)
+    assert read["results"][0]["job_id"] == "4441501850"
+    embedded = _module("aaa", [{"jobPostingCard": _feed_card("4441501851"),
+                                "jobPostingCardWrapper": None}])
+    inline = jp.read_job_collection(_feed_body([embedded], []))
+    assert (inline["ok"], inline["state"], inline["count"]) == (True, "hits", 1)
+    assert inline["results"][0]["job_id"] == "4441501851"
+
+
+def test_two_included_entries_with_the_same_entity_urn_are_fail_closed():
+    # A pool contradicting itself about one URN cannot resolve it, and 'the first one' is exactly
+    # the reduction rule 3 forbids: the card is LOST, not one of two.
+    module = _module("aaa", [_wrap("4441501850")])
+    body = _feed_body([module], [_feed_card("4441501850"),
+                                 _feed_card("4441501850", title={"text": "A Different Wording"})])
+    read = jp.read_job_collection(body)
+    assert read["ok"] is False and read["state"] == "card_lost" and read["results"] == []
+    assert "ambiguous" in read["reason"]
+
+
+def test_the_feed_verdict_does_not_depend_on_key_order_in_any_permutation():
+    # LinkedIn's serialisation order is not a fact we control. The same body, re-serialised in
+    # every key order of module, card and union item, must read identically.
+    # The UNION ITEM is permuted too, and it carries FILLED foreign branches next to the job
+    # branch: 'the FIRST filled branch is the type' passes a body whose item lists the job branch
+    # first and silently skips the very same body serialised the other way round. That mutation
+    # survived every other test, so this is the one place the class is held instead of an instance.
+    item = {"feedbackCard": {"text": "How relevant was this?"},
+            "jobPostingCardWrapper": {"*jobPostingCard": _CARD_URN.format("4441501850")},
+            "tabbedCollection": {"tabs": []}}
+    module = _module("aaa", [item], header={"title": {"text": "Top-Jobs für Sie"}})
+    card = _feed_card("4441501850")
+    baseline = jp.read_job_collection(_feed_body([module], [card]))
+    assert baseline["count"] == 1, "a filled foreign branch next to the job branch is still a hit"
+    for item_keys in itertools.permutations(item.keys()):
+        shuffled_item = {k: item[k] for k in item_keys}
+        for keys in itertools.permutations(module.keys()):
+            shuffled_module = {k: module[k] for k in keys}
+            shuffled_module[_RESULTS] = [shuffled_item]
+            for card_keys in itertools.permutations(card.keys()):
+                shuffled_card = {k: card[k] for k in card_keys}
+                got = jp.read_job_collection(_feed_body([shuffled_module], [shuffled_card]))
+                assert got == baseline, (item_keys, keys, card_keys)
+
+
+def test_the_job_branch_is_found_at_every_position_of_the_full_eighteen_branch_union():
+    # The union as measured: 18 keys, exactly one filled. The filled NAME is the type, so its
+    # POSITION must not matter — not at the front, not at the back, not anywhere between. This is
+    # the same class as the permutation above, at the measured width instead of a sample of three.
+    for pos in range(len(_UNION_BRANCHES)):
+        rotated = _UNION_BRANCHES[pos:] + _UNION_BRANCHES[:pos]
+        item = {name: None for name in rotated}
+        item["jobPostingCardWrapper"] = {"*jobPostingCard": _CARD_URN.format("4441501850")}
+        read = jp.read_job_collection(
+            _feed_body([_module("aaa", [item])], [_feed_card("4441501850")]))
+        assert (read["ok"], read["state"], read["count"]) == (True, "hits", 1), rotated[0]
+        assert read["results"][0]["job_id"] == "4441501850"
+        assert read["lost"] == 0 and read["skipped"] == 0 and read["reason"] is None
+
+
+def test_a_module_wider_than_the_width_cap_does_not_lose_cards_silently():
+    # The requirement 'a partial loss NAMES itself' one level deeper than the resolution failure:
+    # `_feed_module_cards` walks `entitiesResolutionResults[:_MAX_WIDTH]`, so a module wider than the
+    # cap drops the rest of its RESOLVABLE wrappers without a word — ok=True, lost=0, reason=None.
+    # Whether the cap stays (then named) or does not apply to this measured, bounded list is a code
+    # decision; a silent count is not one of the options.
+    wide = jp._MAX_WIDTH + 10
+    ids = [str(4441501850 + i) for i in range(wide)]
+    module = _module("aaa", [_wrap(i) for i in ids])
+    read = jp.read_job_collection(_feed_body([module], [_feed_card(i) for i in ids]))
+    if read["count"] == wide:
+        assert read["ok"] is True and read["lost"] == 0 and read["reason"] is None
+    else:
+        assert read["count"] < wide
+        assert read["ok"] is False or read["reason"], (
+            f"{wide - read['count']} of {wide} cards were dropped at the width cap without a name: "
+            f"ok={read['ok']}, lost={read['lost']}, reason={read['reason']}")
+        assert str(wide) in str(read["reason"]), "the named loss has to state what it read against"
+
+
+def test_a_primary_description_without_the_separator_is_all_employer():
+    # Employer and location sit in ONE string. Without ' · ' the whole text is the employer and the
+    # location is None — the missing half is never invented, in neither direction.
+    assert jp.split_primary_description({"text": "Employer Only GmbH"}) == ("Employer Only GmbH",
+                                                                            None)
+    assert jp.split_primary_description(None) == (None, None)
+    assert jp.split_primary_description({"text": "E GmbH · Bremen · Deutschland"}) == (
+        "E GmbH", "Bremen · Deutschland"), "a further separator stays part of the location"
+    module = _module("aaa", [_wrap("4441501850")])
+    card = _feed_card("4441501850", primaryDescription={"text": "Employer Only GmbH"})
+    read = jp.read_job_collection(_feed_body([module], [card]))
+    assert read["results"][0]["company"] == "Employer Only GmbH"
+    assert read["results"][0]["location"] is None
+
+
+def test_an_empty_module_and_a_hidden_module_are_silently_skipped():
+    # Measured siblings, not failures: module 1 of the owner's run carried zero entries. `hide` is
+    # the module's own flag — a hidden module's cards are not on the page the caller sees.
+    modules = [_module("aaa", []),
+               _module("bbb", [_wrap("4441501851")], hide=True),
+               _module("ccc", [_wrap("4441501850")])]
+    read = jp.read_job_collection(_feed_body(modules, [_feed_card("4441501850"),
+                                                       _feed_card("4441501851")]))
+    assert (read["ok"], read["state"], read["count"]) == (True, "hits", 1)
+    assert read["skipped"] == 2 and read["lost"] == 0 and read["discarded"] == 0
+    assert [c["job_id"] for c in read["results"]] == ["4441501850"]
+    alone = jp.read_job_collection(_feed_body([_module("aaa", [])], []))
+    assert (alone["ok"], alone["state"], alone["skipped"]) == (True, "empty", 1)
+
+
+def test_a_card_without_a_job_seeker_state_is_no_error():
+    # `*jobSeekerJobState` is the card's ONLY starred key and it is optional. Absent means None.
+    module = _module("aaa", [_wrap("4441501850")])
+    read = jp.read_job_collection(_feed_body([module], [_feed_card("4441501850")]))
+    assert (read["ok"], read["state"], read["count"]) == (True, "hits", 1)
+    assert read["results"][0]["job_seeker_job_state_urn"] is None
+    assert read["reason"] is None
+
+
+def test_a_module_is_recognised_without_a_type_by_its_own_urn():
+    # The `$type` VALUE is not owner-measured — only that the key exists. A module must therefore
+    # stay readable by its measured URN prefix alone, or the whole chain hangs on an invented name.
+    module = _module("aaa", [_wrap("4441501850")])
+    del module["$type"]
+    read = jp.read_job_collection(_feed_body([module], [_feed_card("4441501850")]))
+    assert (read["ok"], read["state"], read["count"]) == (True, "hits", 1)
+
+
+def test_a_card_contradicting_itself_about_its_job_id_is_lost_not_guessed():
+    # `entityUrn` is the id; `preDashNormalizedJobPostingUrn` is read ONLY to contradict it. A url
+    # pointing at another job than the one that was read is the worst outcome this module knows.
+    module = _module("aaa", [_wrap("4441501850")])
+    card = _feed_card("4441501850",
+                      preDashNormalizedJobPostingUrn="urn:li:fs_normalized_jobPosting:9999999999")
+    read = jp.read_job_collection(_feed_body([module], [card]))
+    assert read["ok"] is False and read["state"] == "card_lost" and read["results"] == []
+    assert "contradiction" in read["reason"]
+
+
+def test_a_starred_entry_list_without_a_collection_witness_is_not_a_container():
+    # The container half's guard: a STARRED list holds URNs and is by shape indistinguishable from
+    # any other reference list, so it is admitted only where the node itself proves it is a
+    # collection (`paging` or the CollectionResponse $type) — both owner-measured on the feed.
+    modules = [_module("aaa", [_wrap("4441501850")])]
+    rail = {"data": {"similarJobsRail": {"*elements": [modules[0]["entityUrn"]]}},
+            "included": [*modules, _feed_card("4441501850")]}
+    read = jp.read_job_collection(rail)
+    assert read["ok"] is False and read["state"] == "unknown"
+    assert read["count"] == 0, "a reference list without a collection witness is not the feed"
+    assert jp.container_entry_keys({"*elements": [], "paging": {"total": 0}}) == ["*elements"]
+    assert jp.container_entry_keys({"*elements": [], "$type": _COLL}) == ["*elements"]
+    assert jp.container_entry_keys({"*elements": []}) == []
+
+
+def test_a_node_holding_both_entry_keys_with_content_is_ambiguous():
+    # The same undecidability as two candidate containers, one level down: merging would invent a
+    # page LinkedIn never sent, preferring one is 'the first key wins' again.
+    both = {"data": {"$type": _COLL, "elements": [_card("1111111111")],
+                     "*elements": ["urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,aaa)"],
+                     "paging": {"total": 2}}}
+    read = jp.read_job_collection(both)
+    assert read["ok"] is False and read["state"] == "ambiguous" and read["results"] == []
+
+
+# ── fix round 1: a shorter list, a foreign id and an ununderstood form all have to say so ──
+def test_a_module_wider_than_fifty_returns_every_resolvable_card():
+    # The width cap `_MAX_WIDTH` bounds recursive DISCOVERY over an unknown body; applied to the
+    # module's own embedded, already-parsed list it dropped resolvable cards without a word.
+    wide = jp._MAX_WIDTH + 10
+    ids = [str(4441501850 + i) for i in range(wide)]
+    read = jp.read_job_collection(_feed_body([_module("aaa", [_wrap(i) for i in ids])],
+                                             [_feed_card(i) for i in ids]))
+    assert (read["ok"], read["state"], read["count"]) == (True, "hits", wide)
+    assert read["lost"] == 0 and read["dropped"] == 0 and read["reason"] is None
+
+
+def test_the_limit_never_cuts_cards_read_out_of_modules_and_names_what_it_does_cut():
+    # `limit` is the caller's ENTRY count. On the FEED an entry is a MODULE carrying several cards,
+    # so cutting cards to it threw away understood jobs that cursor paging cannot bring back.
+    modules = [_module(t, [_wrap(i) for i in ids]) for t, ids in
+               (("aaa", ["4441501850", "4441501851"]), ("bbb", ["4441501852", "4441501853"]))]
+    cards = [_feed_card(str(4441501850 + i)) for i in range(4)]
+    read = jp.read_job_collection(_feed_body(modules, cards), limit=2)
+    assert (read["ok"], read["count"], read["dropped"]) == (True, 4, 0)
+    # On the SEARCH route an entry IS a card, so the limit still applies — but it says so.
+    search = jp.read_job_collection({"data": {"elements": [_card("1111111111"),
+                                                           _card("2222222222"),
+                                                           _card("3333333333")]}}, limit=2)
+    assert search["count"] == 2 and search["dropped"] == 1
+    assert search["reason"] and "limit=2" in search["reason"]
+
+
+def test_a_feed_entity_never_gets_its_id_from_a_foreign_tracking_urn():
+    # An entity carrying the measured container is a MODULE even when `$type` and urn drift; before
+    # this, it fell through to the SEARCH projection, which reads the id from `trackingUrn` and
+    # answered with a job that is not the one in the body.
+    drifted = {"$type": "com.linkedin.voyager.dash.jobs.SomethingElse",
+               "entityUrn": "urn:li:fsd_somethingElse:(JOBS_HOME_JYMBII,aaa)",
+               "trackingUrn": "urn:li:jobPosting:7777777",
+               "entitiesResolutionResults": [_wrap("4441501850")]}
+    body = {"data": {"data": {"jobsDashJobsFeedAll": {
+        "$type": _COLL, "*elements": [drifted["entityUrn"]], "paging": {"total": 1}}}},
+        "included": [drifted, _feed_card("4441501850")]}
+    read = jp.read_job_collection(body)
+    assert [c["job_id"] for c in read["results"]] == ["4441501850"], "the card IN the body"
+    assert "7777777" not in str(read["results"])
+
+
+def test_a_feed_entity_whose_container_key_drifted_is_not_projected_by_the_search_route():
+    # Last line of defence: all module witnesses gone, but a job branch is still one level down.
+    # Reading `trackingUrn` here would answer with a foreign job id — so the form is named unread.
+    drifted = {"$type": "com.linkedin.voyager.dash.jobs.SomethingElse",
+               "entityUrn": "urn:li:fsd_somethingElse:(JOBS_HOME_JYMBII,aaa)",
+               "trackingUrn": "urn:li:jobPosting:7777777",
+               "entityResolutionResultsV2": [_wrap("4441501850")]}
+    body = {"data": {"data": {"jobsDashJobsFeedAll": {
+        "$type": _COLL, "*elements": [drifted["entityUrn"]], "paging": {"total": 1}}}},
+        "included": [drifted, _feed_card("4441501850")]}
+    read = jp.read_job_collection(body)
+    assert read["ok"] is False and read["state"] == "drift" and read["results"] == []
+    assert read["unread"] == 1 and "7777777" not in str(read["reason"])
+
+
+def test_a_card_urn_nested_inside_a_foreign_urn_is_not_an_identity():
+    # `_CARD_URN_RE` is anchored: the identity is the WHOLE entityUrn or there is none.
+    nested = "urn:li:fsd_jobPostingCardUnion:(urn:li:fsd_jobPostingCard:(9999999,X),FOO)"
+    card, why = jp.project_feed_job_card(_feed_card("4441501850", entityUrn=nested))
+    assert card is None and "entityUrn" in why
+    embedded = _module("aaa", [{"jobPostingCard": _feed_card("4441501850", entityUrn=nested)}])
+    read = jp.read_job_collection(_feed_body([embedded], []))
+    assert read["ok"] is False and read["state"] == "card_lost"
+    assert "9999999" not in str(read["results"])
+
+
+@pytest.mark.parametrize("module,witness", [
+    (_module("aaa", None, entitiesResolutionResults=None), "not_a_list"),
+    ({"$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+      "entityUrn": "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,aaa)",
+      "entityResolutionResultsV2": []}, "missing"),
+    (_module("aaa", [{name: None for name in _UNION_BRANCHES}]), "no_filled_branch"),
+    (_module("aaa", ["not-an-object"]), "not_an_object"),
+])
+def test_a_module_form_that_was_not_understood_is_drift_and_never_a_promotion_feed(module, witness):
+    # The rejected false success one level deeper: a renamed container key or a union item with no
+    # filled branch was counted as `skipped` — sold to the agent as 'understood, legitimately no
+    # job'. Only the MEASURED empty list and a hidden module stay silent.
+    read = jp.read_job_collection(_feed_body([module], []))
+    assert (read["ok"], read["state"]) == (False, "drift"), witness
+    assert read["unread"] == 1 and read["skipped"] == 0 and read["reason"]
+
+
+def test_an_unread_form_next_to_a_readable_card_still_names_both():
+    modules = [_module("aaa", [_wrap("4441501850")]),
+               _module("bbb", [{name: None for name in _UNION_BRANCHES}])]
+    read = jp.read_job_collection(_feed_body(modules, [_feed_card("4441501850")]))
+    assert read["ok"] is False and read["state"] == "drift"
+    assert read["count"] == 1 and read["unread"] == 1, "what WAS read stays visible"
+
+
+# ── fix round 2: the chokepoint, not another witness ──
+@pytest.mark.parametrize("drifted,shape", [
+    ({"$type": "com.linkedin.voyager.dash.jobs.FeedModuleV2",
+      "entityUrn": "urn:li:fsd_x:(A,1)",
+      "trackingUrn": "urn:li:jobPosting:7777777",
+      "title": {"text": "FOREIGN TITLE"},
+      "sections": {"inner": [_wrap("4441501850")]}}, "job_branch_two_levels_down"),
+    ({"$type": "com.linkedin.voyager.dash.jobs.FeedModuleV2",
+      "entityUrn": "urn:li:fsd_x:(A,1)",
+      "trackingUrn": "urn:li:jobPosting:7777777",
+      "title": {"text": "FOREIGN TITLE"}}, "no_job_branch_at_all"),
+])
+def test_a_referenced_entity_that_is_no_module_never_reaches_the_search_projection(drifted, shape):
+    # The class, not the instance: witnesses can always be out-driftet one level deeper. What is
+    # decidable WITHOUT looking inside is where the entry came from — a URN in the starred
+    # `*elements` list is the FEED shape, and what it names is a module. Is it not readable as one,
+    # it is unread; it never gets an id from `trackingUrn`.
+    body = {"data": {"data": {"jobsDashJobsFeedAll": {
+        "$type": _COLL, "*elements": [drifted["entityUrn"]], "paging": {"total": 1}}}},
+        "included": [drifted, _feed_card("4441501850")]}
+    read = jp.read_job_collection(body)
+    assert (read["ok"], read["state"], read["count"]) == (False, "drift", 0), shape
+    assert read["results"] == [] and read["unread"] == 1
+    assert "7777777" not in str(read) and "FOREIGN TITLE" not in str(read)
+
+
+def test_the_chokepoint_leaves_the_search_route_untouched():
+    # The search route never arrives through a URN string: its `elements` hold the cards inlined.
+    search = jp.read_job_collection({"data": {"elements": [_card("1111111111")]}})
+    assert (search["ok"], search["state"], search["count"]) == (True, "hits", 1)
+    assert search["unread"] == 0
+
+
+def test_an_inlined_object_inside_the_starred_list_never_becomes_a_card():
+    """The route decision hangs on the container KEY, not on an entry's runtime type.
+
+    `*elements` is the feed's shape and its entries are URNs naming modules. An entry sitting there
+    inlined as an object is a form we cannot read — whatever it contains. While the decision hung on
+    `isinstance(ent, str)` such an entry skipped the chokepoint and reached the search projection,
+    which takes its id from `trackingUrn`: a foreign job_id and url standing next to a correctly
+    read card at ok=True, with nothing marking the difference. Measured 2026-08-01.
+    """
+    module_urn = "urn:li:fsd_jobsFeedCardModule:(JOBS_HOME_JYMBII,m0)"
+    raw = {
+        "data": {"data": {"jobsDashJobsFeedAll": {
+            "*elements": [module_urn, {
+                "$type": "com.linkedin.voyager.dash.jobs.SomethingDrifted",
+                "trackingUrn": "urn:li:jobPosting:7777777",
+                "title": "FOREIGN TITLE",
+                "primaryDescription": {"text": "Evil Corp · Nowhere"}}],
+            "paging": {"total": 2, "count": 2, "start": 0},
+            "$type": "com.linkedin.restli.common.CollectionResponse"}}},
+        "included": [
+            {"$type": "com.linkedin.voyager.dash.jobs.JobsFeedCardModule",
+             "entityUrn": module_urn, "moduleType": "VERTICAL_LIST",
+             "entitiesResolutionResults": [{"jobPostingCardWrapper": {
+                 "*jobPostingCard": "urn:li:fsd_jobPostingCard:(1,JOBS_HOME_JYMBII)"}}]},
+            {"$type": "com.linkedin.voyager.dash.jobs.JobPostingCard",
+             "entityUrn": "urn:li:fsd_jobPostingCard:(1,JOBS_HOME_JYMBII)",
+             "title": "REAL JOB", "primaryDescription": {"text": "Real GmbH · Bremen"}}],
+    }
+    read = jp.read_job_collection(raw)
+    blob = json.dumps(read)
+    assert "7777777" not in blob, "a foreign identity reached the result"
+    assert "FOREIGN TITLE" not in blob, "a foreign title reached the result"
+    assert read["ok"] is False, "an entry we could not read must not read as success"
+    assert read["state"] == "drift"
+    assert [c["job_id"] for c in read["results"]] == ["1"], "the real card is still read"

@@ -505,10 +505,79 @@ Not to be re-admitted as facts: the vgreq-header cause of the SDUI 500 (unverifi
 `currentActor` cause (a red herring per
 `mcp/lib/client.py:433-434`); carry the latter as one causeless class "SDUI replay incomplete".
 
-## 🔍 Jobs recommendations endpoint — live 200, nothing readable; the raw body is the missing artifact
+## 🔍 Jobs recommendations — the shape is measured, the read is not live-proven
 
-**Status 2026-07-30 (owner-run — provenance and scope: `STATUS-MATRIX.md`, legend entry "(owner-run)"):**
-the tool is fine, the endpoint is not. Separate the two layers, they are not the same finding:
+**Status 2026-07-31 (owner-run — provenance and scope: `STATUS-MATRIX.md`, legend entry "(owner-run)").**
+The owner measured the **response shape** of the feed route himself (`count:5`,
+`queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`): the container is
+`data.data.jobsDashJobsFeedAll` with a starred entry list, and the chain has **three** hops —
+`*elements` points at **jobs-feed modules**, each module carries an embedded list of 18-branch unions,
+and only the `jobPostingCardWrapper` / `jobPostingCard` branch leads to the job card
+(`27-JOBS.md` §1.3). A reader for that chain exists and is proven **offline** against a fixture of the
+measured form.
+
+**What is open, in the order it should be worked:**
+
+1. **A card minted from a FOREIGN identity — narrowed, not gone, and still the one open defect that can
+   produce a wrong answer, so it goes first.** An entity that the reader does not recognise as a module
+   can fall through to the SEARCH projection, which reads the id at `_ID_URN_KEYS`
+   (`mcp/lib/jobs_parse.py:112`, e.g. `trackingUrn`) — the entity that *contains* the real cards then
+   becomes a card with a foreign id, `ok=True`, `state="hits"`.
+   **Closed since:** the measured shape. An entry that arrived as a **URN string** in the starred
+   `*elements` list is a name for a module by where it came from, so if it does not read as one it is
+   `unread`, `state="drift"`, `ok=False` (`mcp/lib/jobs_parse.py:1253-1264`, in `read_job_collection`).
+   A parametrized test pins both drifted shapes and a second test pins that the inlined search route is
+   untouched (`27-JOBS.md` §4.2).
+   **(a) CLOSED 2026-08-01** — the reach this entry described as open. A drifted entity standing
+   **inlined as an object inside the starred list** used to answer `ok=True`, `state="hits"`,
+   `job_id 7777777`, with the foreign identity next to a correctly read card and nothing marking the
+   difference. The fix is the one this entry named: the route decision now hangs on the container
+   **key** rather than on an entry's runtime type — `*elements` is the feed's shape, so an inlined
+   object there is `unread`, `state="drift"`, `ok=False`, whatever it contains. Pinned by
+   `test_an_inlined_object_inside_the_starred_list_never_becomes_a_card`, and the search route is
+   untouched because it arrives through a non-starred `elements` list.
+   **Still open, measured by review probes, no test pins it:**
+   (b) the same entity in a **non-starred `elements` list** with its job branch below the one-level
+   witness. This is **pre-existing search-route behaviour** — the baseline parser answers identically —
+   and this ticket's scope forbids touching that route; it is recorded so it is not misread as a
+   regression, and closing it is a separate owner decision.
+   `27-JOBS.md` §6 item 10.
+2. **A failed hop A is not fail-closed and blames the wrong cause.** A module URN out of `*elements`
+   that does not resolve in `included[]`, or that resolves **twice**, is counted as `discarded` with
+   `ok=True` and a `reason` that says "no identifying job id at a readable position" — while behind that
+   one entry a whole module of job cards can stand. The resolution reason is computed and thrown away
+   (`_why` at `mcp/lib/jobs_parse.py:1236`). Decide: carry hop A's failure into `unread`/`lost`
+   (`ok=False`, consistent with the rest), or keep `ok=True` and name the real cause.
+   `27-JOBS.md` §6 item 13.
+3. **Collapsed duplicates have no published counter** — two modules naming the same card answer
+   `count: 1`, `read_entries: 2`, `reason: None`. The balance guard already computes the number
+   internally; the cheap honest fix is to return it. `27-JOBS.md` §6 item 12.
+
+**Closed in the meantime, kept as reasoning, not as work:** the width cap that dropped resolvable cards
+(item 7), the `limit` cut that applied a **module** count to **cards** (item 8), the three
+not-understood module shapes that were sold as "understood and job-free" (item 11), and the
+foreign-identity fall-through for entries the starred list names by **URN** (item 10's measured shape,
+see point 1 above). All of them are held by tests now; `27-JOBS.md` §4.2 lists which.
+4. **One owner decision, not a defect:** an **empty** entry list next to `paging.total > 0` still reads
+   `drift`/`ok=False`, and two tests pin that. On the feed a cursor page past the end looks exactly like
+   this, so it may belong with the withdrawn invariant. Withdraw it for the feed (→ `empty`) or keep it
+   as a deliberate feed special case; either way the tests move with it. `27-JOBS.md` §6 item 9.
+5. **The live read that would make the feed a verified read** (a decision sheet, not a task for an
+   agent): one `get_job_recommendations(count=5)` in the owner's own session against the same queryId,
+   comparing `state`, `count`, `skipped`, `lost`, `unread` and the card titles with his measurement. Cost: one
+   GET on his own account. Risk: the queryId hash may have rotated, which answers 4xx with the
+   rotation hint and no side effect. `27-JOBS.md` §7.
+
+**The invariant that was WITHDRAWN here, so it does not creep back in:** "`paging.total > 0` next to zero
+results is an error" is **false for the feed**, because `total` counts **modules** — a promotion-only feed
+is `state="empty"`, `ok=True`, and two tests hold that (`27-JOBS.md` §3). It stays plausible for the
+**search** route (`voyagerJobsDashJobCards`), where `total` counts jobs. Do not merge the two arithmetics
+again, and do not "fix" the empty verdict back.
+
+### The 2026-07-30 layer of this entry (unchanged, and still the reason the endpoint is open)
+
+**Status 2026-07-30 (owner-run):** the tool is fine, the endpoint is not. Separate the two layers, they
+are not the same finding:
 
 - **The tool is ✅ verified honest.** On a live **HTTP 200** whose body held no collection container
   under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `read_entries: 0`,
@@ -517,22 +586,26 @@ the tool is fine, the endpoint is not. Separate the two layers, they are not the
   demonstrated on a real body. Nothing to do here.
 - **The endpoint is NOT verified usable** and stays open: it answered and delivered no readable jobs.
 
-**The one missing artifact: the raw response body of that 200.** Three explanations are open and the
-body decides between them — (a) the response shape drifted and the container sits under a different key,
-(b) the feed was genuinely empty or the account is not entitled to it, (c) an in-band error arrived with
-a 200. Until then, do **not** touch the parser: every fix would be a guess about a body nobody has read,
-which is the exact failure mode this repo's history warns about.
+**The missing artifact of that run: the raw response body of the 200.** Three explanations were open and
+the body decides between them — (a) the response shape drifted and the container sits under a different
+key, (b) the feed was genuinely empty or the account is not entitled to it, (c) an in-band error arrived
+with a 200. **The rule attached to this used to be "do not touch the parser at all", and it has been
+overtaken by evidence, not by impatience:** the owner measured the shape himself on 2026-07-31, and
+explanation (a) is a mechanism that fits — the starred entry key. That is what the parser was changed
+against. The rule underneath it stands unchanged for everything he did **not** measure: no key, no branch
+name, no field is admitted that is not in his measurement or in a capture.
 
-**Next step (a read, low risk):** re-run `get_job_recommendations(3)` while capturing the request/response
-with `tools/crawl_recursive.py`, or capture the jobs feed request from the real client again. The tool
-itself deliberately never returns bodies, so the capture cannot come from the tool's output.
-**Handling:** a captured feed body is private data — never commit it (`.gitignore` already excludes
-`_captures*/`), and strip it before any of it reaches a doc.
+**Still worth capturing (a read, low risk):** re-run `get_job_recommendations` while capturing the
+request/response with `tools/crawl_recursive.py`, or capture the jobs feed request from the real client
+again. The tool itself deliberately never returns bodies, so the capture cannot come from the tool's
+output. **Handling:** a captured feed body is private data — never commit it (`.gitignore` already
+excludes `_captures*/`), and strip it before any of it reaches a doc.
 
-**Also settled by that same body: open items 1 and 3 in `27-JOBS.md` §6** (the candidate search's
-depth/width limit, and the container being picked by shape rather than by evidence that it is the feed).
-The live run was expected to settle them and did **not** — a body without any findable container reveals
-neither how deep the real container sits nor whether a second, filled rail sits beside it.
+**What that capture would still add, over and above the measurement: open items 1 and 3 in
+`27-JOBS.md` §6** (the candidate search's depth/width limit, and the container being picked by shape
+rather than by evidence that it is the feed). The measured path lies inside the depth limit, so item 1's
+depth half does not bite on that body; whether a second, **filled** rail sits beside the feed container —
+item 3 — is not answerable from the reported shape and needs the body itself.
 
 **Not part of this entry, do not merge it in:** the owner also measured **HTTP 400** (14-byte body) for a
 different, REST-like form,
