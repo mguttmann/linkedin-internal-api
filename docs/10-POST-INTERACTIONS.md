@@ -74,8 +74,25 @@ Body: {
 - UI: your repost → "…" → **"Repost löschen"** → confirm.
 - **Verified:** repost removed. ✅ — but note this was verified **in the browser**. The MCP tool
   `delete_repost` is **not operational**: its `queryId` carries no `.<hash>`
-  (`mcp/lib/client.py:742`), and no captured read maps a repost to its share. See
+  (`_REPOST_DEL_QID`, `mcp/lib/client.py:766`), and no captured read maps a repost to its share. See
   `STATUS-MATRIX.md` note 4 and `BACKLOG.md`.
+- **Since 2026-07-31 the tool fails honestly instead of firing a doomed request.** `delete_repost`
+  checks `_qid_has_hash()` (`mcp/lib/client.py:381`) **before** building the URL and returns
+  `{"ok": False, "status": "not_configured", "retryable": False, note: …}` — the note names
+  `tools/capture_write_action.py` as the way to re-capture the hash
+  (`mcp/lib/client.py:776-784`). `status` is deliberately a **string**, not an HTTP code, and
+  `retryable` is explicit, so a caller that retries on 5xx does not read this as "try again".
+  A test counts the transport calls on a fake `vgreq` and requires **zero** `post`/`get`/`delete`
+  in this state (`mcp/tests/test_client.py:544`). Offline-proven, **not yet live-tested**.
+  The still-open half — which hash, and which read maps repost→share — stays in `BACKLOG.md`.
+- **Which layer sends nothing — read this before quoting the zero-call result.** *Zero calls* is a
+  statement about `LinkedInClient.delete_repost()`. The MCP **tool** `server.delete_repost()` still
+  runs `li.ensure_session()` first, which is a **GET** on `/voyager/api/me`
+  (`mcp/server.py:298`), and only then does the client method refuse. So: no request to the delete
+  endpoint, no mutating call at all — but not literally an empty wire at tool level. The read-only
+  suite therefore asserts `not _mutating(transport)` for this one tool
+  (`mcp/tests/test_readonly.py:343`), and the file itself warns that "a GET is NOT proof of a write"
+  (`:114-117`).
 - **Mixed world:** create repost = SDUI (`createInstantRepost`), delete repost = Voyager
   GraphQL (`voyagerFeedDashReposts`).
 

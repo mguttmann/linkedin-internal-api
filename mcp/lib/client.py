@@ -363,6 +363,30 @@ class LinkedInClient:
 
     # --- writes (all verified endpoints from docs/04, 06-19) ------------
     # Full endpoint map: docs/COVERAGE-MAP.md. Each write below carries a live-captured body.
+    @staticmethod
+    def _gql_errors(r) -> list:
+        """Extract `data.errors` from a Voyager GraphQL response — the false-success chokepoint.
+
+        CRITICAL (docs/04, learned the hard way): a GraphQL write answers HTTP 200 and STILL
+        carries a ValidationError in the body. Every GraphQL write must therefore compute
+        ok = 2xx AND not self._gql_errors(r); the first entry's `message` is the error text.
+        Returns [] when the body is not JSON or carries no errors.
+        """
+        try:
+            return (r.json().get("data", {}) or {}).get("errors") or []
+        except Exception:
+            return []
+
+    @staticmethod
+    def _qid_has_hash(query_id: str) -> bool:
+        """True when a queryId carries the '<family>.<deploy hash>' suffix LinkedIn requires.
+
+        A bare family name (no dot) is not a usable queryId — the call is doomed before it is
+        sent. Callers use this to fail honestly instead of firing a hopeless request.
+        """
+        family, _, hash_part = query_id.partition(".")
+        return bool(family and hash_part)
+
     def like(self, activity_urn: str) -> dict:
         """Like a post by activity URN. Verified endpoint (HTTP 201).
         POST voyagerSocialDashReactions?threadUrn={urlencoded activity urn}  {reactionType:LIKE}
@@ -464,11 +488,7 @@ class LinkedInClient:
         r = self._vg().post(url, body)
         # CRITICAL: a 200 can still carry a GraphQL ValidationError in the body — check it,
         # otherwise create_post reports a false success (learned the hard way).
-        errors = []
-        try:
-            errors = (r.json().get("data", {}) or {}).get("errors") or []
-        except Exception:
-            pass
+        errors = self._gql_errors(r)
         ok = r.status_code in (200, 201) and not errors
         out = {"status": r.status_code, "ok": ok, "visibility": vis}
         if ok:
@@ -499,11 +519,7 @@ class LinkedInClient:
             "includeWebMetadata": True,
         }
         r = self._vg().post(url, body)
-        errors = []
-        try:
-            errors = (r.json().get("data", {}) or {}).get("errors") or []
-        except Exception:
-            pass
+        errors = self._gql_errors(r)
         ok = r.status_code in (200, 201) and not errors
         return {"status": r.status_code, "ok": ok, "activity_id": activity_id,
                 "error": (errors[0].get("message") if errors else None)}
@@ -518,7 +534,13 @@ class LinkedInClient:
                                        "options": list(options)}},
                 "queryId": POLL_QID, "includeWebMetadata": True}
         r = self._vg().post(url, body)
-        out = {"status": r.status_code, "ok": r.status_code in (200, 201)}
+        # Same false-success trap as create_post: a 200 can carry a GraphQL ValidationError.
+        errors = self._gql_errors(r)
+        ok = r.status_code in (200, 201) and not errors
+        out = {"status": r.status_code, "ok": ok}
+        if errors:
+            out["error"] = errors[0].get("message", "GraphQL validation error")
+            return out
         try:
             import re as _re
             m = _re.search(r"urn:li:fsd_pollSummary:\d+", r.text)
@@ -738,17 +760,36 @@ class LinkedInClient:
                            "template and replay with minimal headers (like unlike). No browser.")
         return out
 
-    # queryId for repost-delete rotates on deploys; re-grab via capture if it 404s.
+    # queryId for repost-delete. The deploy hash is MISSING (only the bare family below) and it
+    # is in NO capture in this repo — it must never be guessed. Re-grab it by deleting a repost
+    # in the real client with tools/capture_write_action.py, then set the full value here.
     _REPOST_DEL_QID = "voyagerFeedDashReposts"
 
     def delete_repost(self, repost_urn: str) -> dict:
-        """Delete a repost. VERIFIED (Voyager GraphQL DELETE-by-key, docs/10).
+        """Delete a repost via the Voyager GraphQL DELETE-by-key mutation (shape from docs/10).
+
+        NOT OPERATIONAL: _REPOST_DEL_QID carries only the family, not the '.<hash>' suffix every
+        queryId needs, so the call would be rejected. Rather than send a doomed request (and
+        report its failure as a transport problem), this refuses up front — nothing is sent.
         repost_urn: urn:li:fsd_repost:urn:li:instantRepost:(urn:li:share:<shareId>,<repostId>).
-        NOTE: needs the current voyagerFeedDashReposts.<hash> — set _REPOST_DEL_QID.
         """
+        if not self._qid_has_hash(self._REPOST_DEL_QID):
+            return {"status": "not_configured", "ok": False, "retryable": False,
+                    "repost_urn": repost_urn, "endpoint": "voyager.graphql.reposts.delete",
+                    "note": ("delete_repost is not ready for use: the queryId is the bare family "
+                             f"'{self._REPOST_DEL_QID}' with no '.<hash>' suffix, and the hash is "
+                             "in no capture in this repo. NOTHING was sent and retrying will not "
+                             "help. Re-capture it with tools/capture_write_action.py (delete a "
+                             "repost in the real client), then set _REPOST_DEL_QID to the "
+                             "captured voyagerFeedDashReposts.<hash>.")}
         url = f"{BASE}/graphql?action=execute&queryId={self._REPOST_DEL_QID}"
         body = {"variables": {"resourceKey": repost_urn},
                 "queryId": self._REPOST_DEL_QID, "includeWebMetadata": True}
         r = self._vg().post(url, body)
-        return {"status": r.status_code, "ok": r.status_code in (200, 201, 204),
-                "repost_urn": repost_urn}
+        # Same false-success trap as create_post: a 200 can carry a GraphQL ValidationError.
+        errors = self._gql_errors(r)
+        ok = r.status_code in (200, 201, 204) and not errors
+        out = {"status": r.status_code, "ok": ok, "repost_urn": repost_urn}
+        if errors:
+            out["error"] = errors[0].get("message", "GraphQL validation error")
+        return out

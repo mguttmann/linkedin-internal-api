@@ -323,13 +323,28 @@ def test_without_the_flag_confirm_gates_behave_exactly_as_before(monkeypatch, tr
     assert _sent(transport) == [], "confirm gates must still send nothing"
 
 
+# Write tools that are gated like every other write but deliberately send NO MUTATING call:
+# their request cannot succeed as configured, so the client refuses before the transport
+# (client.py delete_repost — the repost-delete queryId hash is in no capture). At THIS (tool)
+# level the ensure_session() GET on /me still goes out (mcp/server.py:298); the client method
+# itself sends nothing at all — that is asserted one layer down in
+# mcp/tests/test_client.py:544 (get + post + delete all empty).
+NOT_OPERATIONAL = {"delete_repost"}
+
+
 @pytest.mark.parametrize("name", sorted(WRITE_KWARGS))
 def test_without_the_flag_writes_reach_the_transport(name, monkeypatch, transport):
     # The gate must be inert when the flag is off: every write tool still reaches the network
     # layer (proof that the read-only tests above measure the gate, not a broken call path).
     # Asserted on a MUTATING verb — a GET would only prove the /me session probe ran.
     monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
-    _call_write(name)
+    out = _call_write(name)
+    if name in NOT_OPERATIONAL:
+        assert not _mutating(transport), \
+            f"{name} must send no MUTATING call while it is not operational"
+        assert out["ok"] is False and out["status"] == "not_configured", \
+            f"{name} must fail honestly instead of reporting a false success"
+        return
     assert _mutating(transport), f"{name} must still perform its WRITE call when read-only is off"
 
 

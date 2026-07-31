@@ -142,12 +142,18 @@ def test_get_my_posts_uses_exact_captured_url_shape():
     assert "profileUrn:urn%3Ali%3Afsd_profile" in url, "profileUrn must be url-encoded"
 
 
-def _client_with_response(resp_json, code=200):
-    """A client whose vgreq.post returns a canned json body + status (for create_post body checks)."""
+def _client_with_response(resp_json, code=200, text=""):
+    """A client whose vgreq.post returns a canned json body + status (for create_post body checks).
+
+    `text` is the RAW body: create_poll scrapes the poll URN out of it with a regex, so a fake
+    response without `.text` would make that scrape silently unreachable (vacuous assertions).
+    """
     calls = {"post": []}
     fake = types.ModuleType("vgreq")
+    raw = text  # not `text = text` in the class body: that reads the class-local, not the arg
     class R:
         status_code = code
+        text = raw
         def json(self_): return resp_json
     fake.post = lambda url, body=None, *a, **k: (calls["post"].append((url, body)) or R())
     fake.get = lambda *a, **k: R()
@@ -487,6 +493,106 @@ def test_create_poll_and_post_with_poll():
     body = calls["post"][-1][1]
     assert body["variables"]["post"]["media"] == {"mediaUrn": "urn:li:fsd_pollSummary:99",
                                                    "category": "URN_REFERENCE"}
+
+
+# --- false-success guard: HTTP 200 + data.errors must never read as success ----------
+# docs/04: a Voyager GraphQL write answers 200 and still carries a ValidationError in the body.
+# create_post/edit_post always checked this; create_poll and delete_repost did not.
+_GQL_ERR = {"data": {"errors": [{"message": "Invalid input for field 'options'"}]}}
+# Placeholder ONLY — the real repost-delete deploy hash is unknown and must never be invented.
+_FAKE_REPOST_QID = "voyagerFeedDashReposts.TESTHASH_NOT_A_REAL_HASH"
+
+
+def test_create_poll_detects_body_validation_error_despite_200():
+    # The raw body deliberately ALSO carries a pollSummary URN: the regex scrape would happily
+    # pick it up, so `poll_urn not in r` only proves something with this text present.
+    err_text = ('{"data":{"errors":[{"message":"Invalid input for field \'options\'"}]},'
+                '"included":[{"entityUrn":"urn:li:fsd_pollSummary:7654321"}]}')
+    li, _ = _client_with_response(_GQL_ERR, code=200, text=err_text)
+    r = li.create_poll("Q?", ["A", "B"])
+    assert r["ok"] is False, "200 + body errors must be treated as failure"
+    assert "Invalid input" in r.get("error", "")
+    assert "poll_urn" not in r, "a failed poll must not hand back a poll urn"
+
+
+def test_create_poll_returns_the_poll_urn_on_a_clean_200():
+    # Counterpart to the guard above: the early return must not make the success path unusable.
+    li, _ = _client_with_response(
+        {"data": {}}, code=200,
+        text='{"included":[{"entityUrn":"urn:li:fsd_pollSummary:7654321"}]}')
+    r = li.create_poll("Q?", ["A", "B"])
+    assert r["ok"] is True and r["status"] == 200
+    assert r["poll_urn"] == "urn:li:fsd_pollSummary:7654321"
+    assert "error" not in r
+
+
+def test_edit_post_detects_body_validation_error_despite_200():
+    li, _ = _client_with_response(_GQL_ERR, code=200)
+    r = li.edit_post("2222222222222222222", "3333333333333333333", "new text")
+    assert r["ok"] is False and "Invalid input" in (r.get("error") or "")
+
+
+def test_delete_repost_detects_body_validation_error_despite_200(monkeypatch):
+    import lib.client as cl
+    li, _ = _client_with_response(_GQL_ERR, code=200)
+    monkeypatch.setattr(cl.LinkedInClient, "_REPOST_DEL_QID", _FAKE_REPOST_QID)
+    r = li.delete_repost("urn:li:fsd_repost:urn:li:instantRepost:(urn:li:share:1,2)")
+    assert r["ok"] is False, "200 + body errors must be treated as failure"
+    assert "Invalid input" in r.get("error", "")
+
+
+def test_delete_repost_sends_nothing_while_the_query_id_hash_is_missing():
+    # The repost-delete deploy hash is in no capture; the tool must fail honestly instead of
+    # firing a doomed request. Constraint enforced, not assumed: count the transport calls.
+    li, calls = _client(200)
+    r = li.delete_repost("urn:li:fsd_repost:urn:li:instantRepost:(urn:li:share:1,2)")
+    assert calls["post"] == [] and calls["delete"] == [] and calls["get"] == [], \
+        "not-configured delete_repost must send ZERO transport calls"
+    assert r["ok"] is False and r["status"] == "not_configured"
+    assert r["retryable"] is False, "a caller must not read this as 'try again'"
+    assert "capture_write_action.py" in r["note"], "the note must name the re-capture tool"
+
+
+def test_every_graphql_write_checks_data_errors():
+    # CLASS guard, not an instance guard: create_poll/delete_repost were the two known misses.
+    # Any FUTURE method that POSTs a graphql action=execute mutation and reports an "ok" flag
+    # must route through _gql_errors — otherwise the false-success class comes straight back.
+    import ast
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1] / "lib" / "client.py"
+    tree = ast.parse(src.read_text())
+    cls = next(n for n in tree.body
+               if isinstance(n, ast.ClassDef) and n.name == "LinkedInClient")
+    missing = []
+    for fn in [n for n in cls.body if isinstance(n, ast.FunctionDef)]:
+        body = ast.get_source_segment(src.read_text(), fn) or ""
+        posts_mutation = "action=execute" in body and ".post(" in body
+        reports_ok = '"ok"' in body
+        if posts_mutation and reports_ok and "_gql_errors" not in body:
+            missing.append(f"{fn.name} (client.py:{fn.lineno})")
+    assert not missing, (
+        "GraphQL writes reporting ok without a data.errors check (HTTP 200 can carry a "
+        f"ValidationError — docs/04): {missing}")
+
+
+def test_graphql_write_bodies_are_unchanged_by_the_errors_check(monkeypatch):
+    # The errors check must not alter WHAT is sent: freeze url + body of the two touched writes.
+    import lib.client as cl
+    li, calls = _client(200)
+    li.create_poll("Q?", ["A", "B"], duration="ONE_DAY")
+    url, body = calls["post"][-1]
+    assert url == (f"{cl.BASE}/graphql?action=execute&queryId={cl.POLL_QID}")
+    assert body == {"variables": {"poll": {"question": "Q?", "duration": "ONE_DAY",
+                                           "options": ["A", "B"]}},
+                    "queryId": cl.POLL_QID, "includeWebMetadata": True}
+    li, calls = _client(200)
+    monkeypatch.setattr(cl.LinkedInClient, "_REPOST_DEL_QID", _FAKE_REPOST_QID)
+    urn = "urn:li:fsd_repost:urn:li:instantRepost:(urn:li:share:1,2)"
+    li.delete_repost(urn)
+    url, body = calls["post"][-1]
+    assert url == f"{cl.BASE}/graphql?action=execute&queryId={_FAKE_REPOST_QID}"
+    assert body == {"variables": {"resourceKey": urn},
+                    "queryId": _FAKE_REPOST_QID, "includeWebMetadata": True}
 
 
 def main():

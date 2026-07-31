@@ -116,6 +116,39 @@ Body:
   the GraphQL call returns HTTP 200 even on a validation error — you MUST check `data.errors`
   in the response body, or you'll report a false success.** (Verified the hard way.)
 - `allowedCommentersScope`: `ALL` | `CONNECTIONS_ONLY` | `NONE`
+
+> **How the MCP client applies that lesson (updated 2026-07-31).** The body check is no longer
+> copy-pasted per method: `LinkedInClient._gql_errors()` (`mcp/lib/client.py:367`) is the single
+> place that extracts `data.errors`, and **every** GraphQL write in the file calls it and computes
+> `ok = 2xx AND not errors` — today `create_post` (`mcp/lib/client.py:491`), `edit_post` (`:522`),
+> `create_poll` (`:538`) and `delete_repost` (`:790`). `create_poll` and `delete_repost` did **not**
+> check it before and reported a false success on a 200-with-`ValidationError`; `create_poll`
+> additionally no longer returns a `poll_urn` when the body carries errors. A regression guard
+> parses `client.py` and fails on a method that POSTs an `action=execute` mutation, reports `ok` and
+> skips `_gql_errors` (`mcp/tests/test_client.py:556`).
+>
+> **What that guard does and does not catch — it is a literal-text heuristic, not a semantic
+> analysis.** It walks the `ast.FunctionDef` nodes directly in the `LinkedInClient` class body and
+> flags a method whose source text contains `action=execute`, `.post(` and `"ok"` but not
+> `_gql_errors`. So it does **not** see a future write that builds the URL from a constant or a
+> helper (no literal `action=execute` in the method), returns `dict(ok=…)` or uses `'ok'` in single
+> quotes, is declared `async def`, or lives outside that class body. Treat it as a tripwire against
+> the copy-paste recurrence that actually happened here, not as a proof that no false-success write
+> can ever be added again.
+>
+> **Honest limits of the check itself** (offline-proven against fixtures, **not yet live-tested** —
+> there was no session):
+> - It reads `data.errors` only, because that is the shape this repo has actually captured
+>   (the warning above). A **top-level** `errors` next to a `null` `data` would not be seen.
+> - A 200 whose body is not parsable JSON (e.g. a login interstitial) yields "no errors" and
+>   therefore `ok: True`. Both residues are tracked in `BACKLOG.md`.
+> - The error text is passed through from the server response verbatim and uncapped
+>   (`errors[0]["message"]`) — also tracked in `BACKLOG.md`.
+> - The three GraphQL **reads** (`get_my_posts`, `get_conversations`, `get_link_preview`) were
+>   deliberately left alone: they return the parsed JSON and claim no `ok`, so they cannot report a
+>   false success. The caller sees `data.errors` itself.
+> - Nothing about the **sent** request changed. URL and body of `create_poll` and `delete_repost`
+>   are frozen by a test (`mcp/tests/test_client.py:578`).
 - **The created post URN** is NOT in the GraphQL response, but in the immediately following
   SDUI call `com.linkedin.sdui.action.sharing.closed-sharebox.server-action`, field `postUrl`
   (`urn:li:share:...`) and `feedDashUpdateEntityUrnString` (`urn:li:activity:...`). Remember

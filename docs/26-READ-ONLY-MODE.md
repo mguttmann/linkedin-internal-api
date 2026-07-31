@@ -26,13 +26,13 @@ the prompt.
 
 Read-only is **independent of, and additional to, the `confirm=True` gates** (`MCP-DESIGN.md` §5).
 It does not replace them and does not change them: with the flag unset, every tool behaves exactly
-as before (regression-tested, `mcp/tests/test_readonly.py:308`, `:327`).
+as before (regression-tested, `mcp/tests/test_readonly.py:308`, `:336`).
 
 ## 2. The split: what is blocked, what is not
 
 Blocking is per tool, declared in the tool layer (`mcp/server.py`) with the `@write_tool`
 decorator (`mcp/server.py:59`). A registry test asserts the **complete** split, so a future tool
-must be classified explicitly or the suite fails (`mcp/tests/test_readonly.py:337`).
+must be classified explicitly or the suite fails (`mcp/tests/test_readonly.py:352`).
 
 | | Tools | Under `LINKEDIN_READ_ONLY` |
 |---|---|---|
@@ -41,6 +41,27 @@ must be classified explicitly or the suite fails (`mcp/tests/test_readonly.py:33
 
 `refresh_session` counts as a **read**: it starts nothing and launches nothing, it only re-probes
 `/me` (`mcp/lib/client.py:61-70`).
+
+**One write never sends its mutating call, even with the flag off (since 2026-07-31):**
+`delete_repost` is **not operational** — its `queryId` has no `.<hash>` — and refuses up front
+instead of sending a doomed request (`mcp/lib/client.py:776`, `BACKLOG.md`). It stays classified as
+a write, stays `confirm`-gated and stays blocked under `LINKEDIN_READ_ONLY`; the split above is
+unchanged.
+
+**Mind the layer — "sends nothing" and "sends no write" are not the same claim here:**
+
+- *Call layer.* `LinkedInClient.delete_repost()` sends **nothing at all**: zero `get`, zero `post`,
+  zero `delete` against the faked transport (`mcp/tests/test_client.py:544`).
+- *Tool layer.* `server.delete_repost()` still emits the session probe first — a **GET** on `/me`
+  from `li.ensure_session()` (`mcp/server.py:298`) — and only then does the client method refuse.
+  So at the boundary this document is about, the honest statement is *"no **mutating** call leaves
+  the process"*, **not** *"nothing leaves the process"*.
+
+Only the *proof* differs from the other eighteen writes: for this one tool the flag-off test
+asserts `not _mutating(transport)` instead of requiring a mutating call to have arrived
+(`NOT_OPERATIONAL`, `mcp/tests/test_readonly.py:332`; assert `:343`). The suite keeps those two
+predicates apart on purpose — `_sent` (`:110`) versus `_mutating` (`:114-117`: *"A GET is NOT proof
+of a write"*). When the hash is captured, that set has to be emptied in the same change.
 
 Twelve of the nineteen writes are additionally `confirm`-gated; seven are not (`like`, `unlike`,
 `follow_company`, `endorse_skill`, `save_post`, `create_poll`, `react_to_message`) and fire a real
@@ -147,7 +168,8 @@ performs a write.* It is not: *"with the flag set nothing in this repo can write
 A protection claim that reaches further than the protection would be the worst kind of defect in
 this repo.
 
-`mcp/lib/client.py` is unchanged by this feature. A second assertion right before the outgoing
+`mcp/lib/client.py` is unchanged by *this* feature — the `delete_repost` guard added on 2026-07-31
+is a separate change and no read-only gate: it refuses whatever the flag says. A second assertion right before the outgoing
 calls was considered and deliberately not built: it would live in the call layer, and its message
 could not name the tool that was blocked. The zero-outgoing-call proof comes from the transport
 monkeypatch in the tests instead.
@@ -193,8 +215,9 @@ Run: `./.venv/bin/python -m pytest mcp/tests tests -q`
 | `delete_comment(dry_run=True)` allowed, marked `read_only`, no network | `:242`, `:250`, `:261` |
 | whitelist does not trust a parameter name; a typo fails safe | `:272`, `:287` |
 | flag unset → confirm gates and dry_run behave exactly as before | `:300`, `:308` |
-| flag unset → every write tool still reaches the transport with a mutating verb | `:327` |
-| the read/write split is complete: a new tool cannot stay unclassified | `:337` |
+| flag unset → every write tool still reaches the transport with a mutating verb — except the not-operational `delete_repost`, which must send **no mutating** call and fail with `status: "not_configured"` | `:336` (`NOT_OPERATIONAL` branch `:342-347`) |
+| the client method behind that one tool sends nothing at all (zero get/post/delete) | `mcp/tests/test_client.py:544` |
+| the read/write split is complete: a new tool cannot stay unclassified | `:352` |
 | tool registration + confirm guardrails (pre-existing, tightened to an exact set) | `mcp/tests/test_server.py:27` |
 
 Environment pin (not a test case but part of the evidence): `mcp/tests/conftest.py:18-26` removes

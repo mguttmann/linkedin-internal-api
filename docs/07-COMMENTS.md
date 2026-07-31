@@ -72,7 +72,7 @@ and the cleanup order) lives in `BACKLOG.md` → "reply_to_comment".
 > `threadUrnActivityThreadUrn` (post). A reply is expected to point at the parent comment thread in
 > `collection/threadUrn`. The shape `threadUrnCommentThreadUrn` *does* exist as a live-200 template
 > — but for `reactions.create`, not for `createComment`
-> (`mcp/lib/templates/react_comment_sdui.json.tpl`, `mcp/lib/client.py:425-436`). Reusing it for
+> (`mcp/lib/templates/react_comment_sdui.json.tpl`, `mcp/lib/client.py:449-460`). Reusing it for
 > replies is a guess until a capture shows it.
 
 ---

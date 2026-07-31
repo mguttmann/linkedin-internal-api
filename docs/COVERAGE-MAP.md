@@ -22,7 +22,8 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
   `get_conversations`, `get_connections_summary`, `get_post_comments`, `get_link_preview`
 - *Posts:* `create_post` (+poll_urn), `edit_post`, `delete_post`, `create_poll`, `save_post`,
   `repost`, `delete_repost` (repost create browserless 200; repost delete captured via browser
-  only — the `delete_repost` tool is **not operational**, see §1)
+  only — the `delete_repost` tool is **not operational** and now **refuses up front, without ever
+  sending the delete request**, see §1)
 - *Engagement:* `like` (browserless 201), `unlike` (browserless 200), `create_comment`,
   `delete_comment` (all browserless)
 - *Messaging:* `send_dm` (browserless live), `recall_message` (browserless 204 live),
@@ -35,15 +36,23 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
 — the recommended default for cron / unattended agents. Offline-proven, not yet live-tested; scope
 and honest limit in `26-READ-ONLY-MODE.md`.
 
+**Honesty of the write results (added 2026-07-31):** a GraphQL write can answer HTTP 200 and still
+carry a `ValidationError` in the body. `create_poll` and `delete_repost` used to report `ok` purely
+from the status code and therefore reported false successes; every GraphQL write now runs the body
+through the shared `_gql_errors()` extractor (`mcp/lib/client.py:367`) and computes
+`ok = 2xx AND not errors`. `delete_repost` additionally refuses to send at all while its `queryId`
+hash is missing. Both are **offline-proven, not yet live-tested**, and the known residues of the
+false-success class are listed in `BACKLOG.md` — details and limits in `04-WRITE-OPERATIONS.md`.
+
 **Key finding:** SDUI writes are browserless-replayable — the earlier `currentActor` "needs a
 browser" story was a red herring (that field is empty in the real browser request too; see
-`mcp/lib/client.py:409-410`).
+`mcp/lib/client.py:433-434`).
 
 **What is actually proven, and what is not** (corrected 2026-07-30 — the previous wording claimed
 more than the evidence carries):
 
 - **Proven factor — the body.** Replay the **full captured body** verbatim; hand-built partial
-  bodies 500. Evidence: `mcp/lib/client.py:393-394` and the `unlike` fix note `:406-412`.
+  bodies 500. Evidence: `mcp/lib/client.py:417-418` and the `unlike` fix note `:433-436`.
 - **Unproven factor — the headers.** The claim "vgreq's Voyager `accept`/`x-restli` headers make
   the SDUI route 500" is **not verified** and is **contradicted for `comments.createComment`** by
   this repo's own code: `create_comment_browserless` posts the SDUI route
@@ -53,16 +62,16 @@ more than the evidence carries):
   (`mcp/lib/client.py:159-160`, `:191`). So vgreq headers on an SDUI route do not by themselves
   produce a 500.
 - **Why the old claim looked proven:** the `unlike` fix changed **body and headers at the same
-  time** (`mcp/lib/client.py:409-412` names both (a) and (b)). That is a confounded A+B fix; only
+  time** (`mcp/lib/client.py:433-436` names both (a) and (b)). That is a confounded A+B fix; only
   the body factor is isolated. The same unproven causality is still asserted in the
-  `_sdui_min_headers` docstring (`mcp/lib/client.py:377-381`) — see `BACKLOG.md`.
+  `_sdui_min_headers` docstring (`mcp/lib/client.py:401-405`) — see `BACKLOG.md`.
 - **The one-variable test that would settle it** (nothing else will): fire the *same* existing
   `unlike_sdui.json.tpl` body twice against the *same own* post — run A through
-  `_post_sdui_template()` (minimal headers, `mcp/lib/client.py:390-404`), run B through
+  `_post_sdui_template()` (minimal headers, `mcp/lib/client.py:414-428`), run B through
   `self._vg().post(url, body, is_json=False)` — and record both HTTP statuses. Reversible
   (like/unlike only), own account only. Until then the header contribution is **unknown**, and
   `03-SDUI-API.md:51-64` (ten "required" SDUI headers) vs. the three that `_sdui_min_headers()`
-  sends (`mcp/lib/client.py:387-388`) also stays unresolved.
+  sends (`mcp/lib/client.py:411-412`) also stays unresolved.
 
 ---
 
@@ -79,7 +88,7 @@ more than the evidence carries):
 | Post **poll** | `PollsPollSummary`→`Shares` URN_REFERENCE | ✅ MCP `create_poll` + `create_post(poll_urn)` (browserless live) |
 | Edit an existing post | `Shares` + `resourceKey`/`updateUrn` | ✅ MCP `edit_post` (browserless live) |
 | **Repost** (instant) | SDUI `feed.requests.createInstantRepost` | ✅ MCP `repost` (browser-only, 500 headless) |
-| Delete repost | Voyager `graphql voyagerFeedDashReposts` (delete-by-key) | 🔍 endpoint captured **via browser**; MCP `delete_repost` is **not operational** (queryId carries no hash — `mcp/lib/client.py:742`) + no read maps repost→share. `BACKLOG.md` |
+| Delete repost | Voyager `graphql voyagerFeedDashReposts` (delete-by-key) | 🔍 endpoint captured **via browser**; MCP `delete_repost` is **not operational** (queryId carries no hash — `mcp/lib/client.py:766`) + no read maps repost→share. Since 2026-07-31 it **fails honestly without sending the delete request** (`status: "not_configured"`, `retryable: False`, re-capture path in the note — `mcp/lib/client.py:776-784`). The client method sends nothing at all — zero get/post/delete (`mcp/tests/test_client.py:544`); at **tool** level the `ensure_session()` GET on `/me` still runs (`mcp/server.py:298`), so the claim is "no mutating call", not "an empty wire" — `10-POST-INTERACTIONS.md`. `BACKLOG.md` |
 | Quote repost (with thoughts) | `voyagerContentcreationDashShares` + reshare ref | ⏳ |
 | **Save / unsave** post | SDUI `update.saveState` `{isSaved}` | ✅ MCP `save_post` (browserless live) |
 | Report post | ? (blocklisted in crawler) | ❌ |
@@ -117,7 +126,7 @@ more than the evidence carries):
 | **Send** a message | `messengerMessages?action=createMessage` | ✅ MCP `send_dm` (browserless live; needs raw-bytes trackingId) |
 | **Edit** a sent message | `messengerMessages/<urn>` patch body | ✅ |
 | **Delete** a message | `messengerMessages?action=recall` | ✅ MCP `recall_message` (browserless 204 live) |
-| **React** to a message (emoji) | Voyager REST `messengerMessages?action=reactWithEmoji` | 🔩 MCP `react_to_message` implemented, **first live observation = HTTP 500** (2026-07-30, owner-reported); cause open — `06-MESSAGING.md` + `BACKLOG.md` |
+| **React** to a message (emoji) | Voyager REST `messengerMessages?action=reactWithEmoji` | 🔩 MCP `react_to_message` implemented, **first live observation = HTTP 500** (2026-07-30, owner-reported); cause open, **owner decision 2026-07-31: no fix attempt** — carried as `[O]` in `STATUS-MATRIX.md`, candidates in `06-MESSAGING.md` + `BACKLOG.md` |
 | Mark conversation read/unread | `messengerConversations` patch read | ✅ |
 | **Typing** indicator | `messengerConversations?action=typing` | ✅ |
 | **Reply** to a message (quote) | button exists, schema pending | ⏳ |

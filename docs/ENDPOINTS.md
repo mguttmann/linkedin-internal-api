@@ -46,10 +46,17 @@ say: schema captured, **browserless not proven**. The open questions (which read
 
 ⁴ **Delete repost — corrected 2026-07-30.** The endpoint is real (browser capture,
 `10-POST-INTERACTIONS.md`), but the MCP tool cannot work today: `_REPOST_DEL_QID` is the bare
-family name `"voyagerFeedDashReposts"` **without a hash** (`mcp/lib/client.py:742`, used in URL
-`:749` and body `:751`), while every GraphQL `queryId` needs `<queryName>.<hash>`
+family name `"voyagerFeedDashReposts"` **without a hash** (`mcp/lib/client.py:766`, used in URL
+`:785` and body `:787`), while every GraphQL `queryId` needs `<queryName>.<hash>`
 (`02-VOYAGER-API.md:5`). Second gap: no read in this repo maps a repost to
 `(urn:li:share:<shareId>,<repostId>)`. See `BACKLOG.md`.
+**Updated 2026-07-31:** the tool no longer sends that doomed request. It checks the `.<hash>`
+suffix first (`mcp/lib/client.py:776`) and returns `status: "not_configured"` / `ok: False` /
+`retryable: False` with the re-capture path, **without sending the delete request**. The client
+method makes no transport call at all — zero get/post/delete, offline-proven
+(`mcp/tests/test_client.py:544`); at **tool** level the `ensure_session()` GET on `/me` still runs
+(`mcp/server.py:298`), so the honest claim is "no mutating call", not "an empty wire". Not
+live-tested. Both gaps above stay open.
 
 ### Messaging (Voyager; send/recall are browserless-verified, react is not)
 | Action | Endpoint | Doc |

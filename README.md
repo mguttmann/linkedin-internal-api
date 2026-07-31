@@ -115,7 +115,7 @@ flowchart LR
 | Domain | Tools |
 |---|---|
 | **Reads** (browserless) | `get_me` · `get_my_posts` · `get_profile` · `get_notifications` · `get_conversations` · `get_connections_summary` · `get_post_comments` · `get_link_preview` |
-| **Posts** | `create_post` (+poll) · `edit_post` · `delete_post` · `create_poll` · `save_post` · `repost` · `delete_repost` |
+| **Posts** | `create_post` (+poll) · `edit_post` · `delete_post` · `create_poll` · `save_post` · `repost` · `delete_repost` **(not operational — refuses without sending the delete request, see `docs/BACKLOG.md`)** |
 | **Engagement** | `like` (browserless) · `unlike` (browser) |
 | **Messaging** | `send_dm` · `recall_message` · `react_to_message` |
 | **Network** | `follow_company` · `connect` · `endorse_skill` · `remove_connection` |

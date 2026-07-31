@@ -135,7 +135,7 @@ are checked in **four places, inconsistently** (all VERIFIED, code facts):
 | Place | Behaviour when a marker is missing |
 |---|---|
 | `lib/vgreq.py:13` | `li["JSESSIONID"]` → raw **`KeyError`** before any request |
-| `mcp/lib/client.py:386` | `cookies.get("JSESSIONID", "")` → **empty** csrf header, request goes out and 403s |
+| `mcp/lib/client.py:410` | `cookies.get("JSESSIONID", "")` → **empty** csrf header, request goes out and 403s |
 | `lib/cookies_extract.py:37-41` | missing `li_at` → `exit(1)`; missing `JSESSIONID` → **warning only**, file is written anyway (`:42`) |
 | `mcp/lib/session_browser.py:144-145` | checks **only** `li_at`, raises `NotLoggedInError` |
 
@@ -179,7 +179,7 @@ correct — but without visibility in `session_status` it is inexplicable to the
 it a list-shaped payload and it breaks immediately — and `vgreq` is the transport under *every*
 call.
 
-`mcp/lib/client.py:385` already accepts **both** shapes
+`mcp/lib/client.py:409` already accepts **both** shapes
 (`cookies = {c["name"]: c["value"] for c in li} if isinstance(li, list) else li`), but **no producer
 in this repo writes the list form** (§1.1) — so that branch is dead today, and its origin is
 INFERRED. A new store must **read both** shapes and **write one**; `lib/vgreq.py` has to learn the
@@ -190,7 +190,7 @@ new shape in the *same* change that starts writing it.
 **VERIFIED (code fact).** There are two independent notions of "the cookie file":
 
 - `lib/vgreq.py:9` — `COOKIE_FILE = os.environ.get("VG_COOKIES", "/tmp/li_cookies.json")`, and
-  `mcp/lib/client.py:383` reads the same env var for the SDUI header path.
+  `mcp/lib/client.py:407` reads the same env var for the SDUI header path.
 - `mcp/lib/client.py:57-58` — constructor default `cookies_path: str = "/tmp/li_cookies.json"`,
   stored as `self.cookies_path`. Grep says `cookies_path` appears **only** on those two lines:
   the attribute is never read anywhere.
@@ -243,7 +243,7 @@ session death:
 `docs/01-AUTH-AND-COOKIES.md:13-14`: the header equals `JSESSIONID` **without the surrounding
 quotes** (the `ajax:` prefix stays), and "Without this header → **HTTP 403**". The cheat sheet
 agrees: `docs/05-VERIFICATION.md:93` — "403 | CSRF missing | set `csrf-token` header = JSESSIONID".
-The exact place where an empty header can be produced is `mcp/lib/client.py:386`
+The exact place where an empty header can be produced is `mcp/lib/client.py:410`
 (`cookies.get("JSESSIONID", "")` — no marker, no exception, empty csrf).
 
 So the reflex "every 403 means the session is dead" is **contradicted by this repo's own
@@ -264,18 +264,18 @@ and is the wrong reflex. **unknown** = declare it unknown, do not guess.
 | # | Signal | `session_suspect` | Evidence | Label |
 |---|---|---|---|---|
 | **L1** | **302 → `/uas/login`** on a Voyager call (arrives as 302 because `allow_redirects=False`, `lib/vgreq.py:41,49,52`) | **YES — the only evidenced case** | `docs/05-VERIFICATION.md:91`; `docs/01-AUTH-AND-COOKIES.md:72` | VERIFIED |
-| **L2** | **403** — `csrf-token` missing or malformed | **NO** — client header defect. Remediation: re-fetch `JSESSIONID`, strip quotes | `docs/01-AUTH-AND-COOKIES.md:13-14`; `docs/05-VERIFICATION.md:93`; producer `mcp/lib/client.py:386` | VERIFIED |
+| **L2** | **403** — `csrf-token` missing or malformed | **NO** — client header defect. Remediation: re-fetch `JSESSIONID`, strip quotes | `docs/01-AUTH-AND-COOKIES.md:13-14`; `docs/05-VERIFICATION.md:93`; producer `mcp/lib/client.py:410` | VERIFIED |
 | **L3** | **401** | **unknown** — declare it unknown; remediation is the `/me` probe | **ABSENT**: the cheat-sheet table `docs/05-VERIFICATION.md:87-94` lists **no** 401 row at all; `:82` names "302/401/403" only jointly | ABSENT |
-| **L4** | **SDUI 500** on a hand-built partial body instead of the full captured body | **NO** — client payload defect; not retryable without changing the body | `mcp/lib/client.py:393-394` (replay verbatim; "partial hand-built bodies 500"), `:409-412`; `docs/COVERAGE-MAP.md:45-46` | VERIFIED (body factor) |
+| **L4** | **SDUI 500** on a hand-built partial body instead of the full captured body | **NO** — client payload defect; not retryable without changing the body | `mcp/lib/client.py:417-418` (replay verbatim; "partial hand-built bodies 500"), `:433-436`; `docs/COVERAGE-MAP.md`, section "Current state (live)", bullet "Proven factor — the body" | VERIFIED (body factor) |
 | **L4b** | SDUI 500 *"because of vgreq's Voyager headers"* | **NO** | ⚠️ **Do not admit this as an error class** — see §3.1. The causality is unverified and contradicted for `comments.createComment` | INFERRED |
 | **L5** | SDUI 500 *"because `requestMetadata.currentActor` is missing"* | **NO** | ⚠️ The **500 is observed**, the **cause is explicitly rejected** in this repo — see §3.2. Carry it as one class with L4: **"SDUI replay incomplete"**, with no cause claim | VERIFIED (500 observed) / INFERRED (cause) |
-| **L6** | **400** — wrong URN form; **500** on a *reversed* URN | **NO** — pure parameter error | `docs/07-COMMENTS.md:104` (correct key → **204**), `:108-110`: `fs_objectComment` form → **400**, `fsd_comment` form → **400**, wrong-order `urn:li:comment:(<post>,<id>)` → **500**, garbage → **400**. Same class of guessed-shape 400/404s: `docs/STATUS-MATRIX.md:121-124` | VERIFIED |
-| **L7** | **GraphQL 200 carrying `data.errors`** — a false success | **NO** — input error. **The most important row: the status code actively lies** | `docs/04-WRITE-OPERATIONS.md:114-117` ("the GraphQL call returns HTTP 200 even on a validation error — you MUST check `data.errors` … (Verified the hard way.)"). Checked in `mcp/lib/client.py:467-478` (`create_post`) and `:502-509` (`edit_post`); **not** checked in `create_poll` (`:511-529`) or `delete_repost` (`:744-754`) — already tracked in `BACKLOG.md`, referenced here only as an error class | VERIFIED |
+| **L6** | **400** — wrong URN form; **500** on a *reversed* URN | **NO** — pure parameter error | `docs/07-COMMENTS.md:104` (correct key → **204**), `:108-110`: `fs_objectComment` form → **400**, `fsd_comment` form → **400**, wrong-order `urn:li:comment:(<post>,<id>)` → **500**, garbage → **400**. Same class of guessed-shape 400/404s: `docs/STATUS-MATRIX.md`, section "Important corrections (paths that do NOT work)" | VERIFIED |
+| **L7** | **GraphQL 200 carrying `data.errors`** — a false success | **NO** — input error. **The most important row: the status code actively lies** | `docs/04-WRITE-OPERATIONS.md:114-117` ("the GraphQL call returns HTTP 200 even on a validation error — you MUST check `data.errors` … (Verified the hard way.)"). Since 2026-07-31 checked by **every** GraphQL write through one shared extractor `_gql_errors()` (`mcp/lib/client.py:367`): `create_post` (`:491`), `edit_post` (`:522`), `create_poll` (`:538`), `delete_repost` (`:790`) — the last two were blind before. Residues of the class (unparsable 200 body, top-level `errors`, uncapped message) are tracked in `BACKLOG.md`; referenced here only as an error class | VERIFIED |
 | **L8** | **200 but a no-op** (SDUI `deleteProfile<X>Form`) | **NO** — but reporting success would be wrong | `docs/BROWSERLESS-REPLAY.md:55-62` ("returns **HTTP 200 but is a no-op**", three variants tried). Note `:63-65`: the legacy read `identity/profiles/{id}/languages` is stale/deprecated (410/400) and is **unfit** for verification. Affects no current MCP tool path | VERIFIED |
-| **L9** | **404** from a rotated `queryId` / `sduiid` hash | **NO** — deploy drift | **INFERRED**: no *observed* rotation-404 is documented. What exists are anticipating code notes (`mcp/lib/client.py:40-41`, `:99-100`, `:106`, `:741`) and a 404 from a *wrong path* (`docs/STATUS-MATRIX.md:121`). Clean handling to copy: `get_conversations` catches the non-JSON case, `mcp/lib/client.py:112-117` | INFERRED |
+| **L9** | **404** from a rotated `queryId` / `sduiid` hash | **NO** — deploy drift | **INFERRED**: no *observed* rotation-404 is documented. What exists are anticipating code notes (`mcp/lib/client.py:40-41`, `:99-100`, `:106`, `:763-765`) and a 404 from a *wrong path* (`docs/STATUS-MATRIX.md`, section "Important corrections (paths that do NOT work)", the `contentcreation/dash/normShares` row). Clean handling to copy: `get_conversations` catches the non-JSON case, `mcp/lib/client.py:112-117` | INFERRED |
 | **L10** | **429** rate limit | **NO** | **ABSENT as an observation** — the only mention is one cheat-sheet row, `docs/05-VERIFICATION.md:94`. Declare it the way Indeed does: *anticipated, never seen* (`indeed-internal-api/lib/errors.py:194-200`) | ABSENT |
 | **L11** | **`KeyError: 'JSESSIONID'`** before the request | **NO** — setup error → `SessionMarkersMissing` | `lib/vgreq.py:13`; reachable because `lib/cookies_extract.py:40-42` warns and writes the file anyway | VERIFIED (code fact) |
-| **L12** | **`FileNotFoundError`** — cookie file absent (the current machine state) | **NO** — setup, not session | `lib/vgreq.py:12`, `mcp/lib/client.py:384`. Today `mcp/lib/client.py:75-76` swallows it and reports `logged_in: false`, i.e. as a session problem. Indeed separates `SessionMissing` (`indeed-internal-api/lib/cookies.py:77`) from `SessionExpired` | VERIFIED (code fact) |
+| **L12** | **`FileNotFoundError`** — cookie file absent (the current machine state) | **NO** — setup, not session | `lib/vgreq.py:12`, `mcp/lib/client.py:408`. Today `mcp/lib/client.py:75-76` swallows it and reports `logged_in: false`, i.e. as a session problem. Indeed separates `SessionMissing` (`indeed-internal-api/lib/cookies.py:77`) from `SessionExpired` | VERIFIED (code fact) |
 | **L13** | **Network / timeout** (25 s, `lib/vgreq.py:41,49,52`) | **NO** | Also collapsed to `False` by `mcp/lib/client.py:75-76`. Indeed: `TransportUnavailable` / `E-NET` (`indeed-internal-api/lib/errors.py:215-221`) | VERIFIED (code fact) |
 
 ### 2.4 Detection order — and the one step that must **not** be copied from Indeed
@@ -366,33 +366,36 @@ re-promote them while reading this design.
 
 ### 3.1 "vgreq's Voyager headers cause the SDUI 500" — unverified, and contradicted
 
-Already documented correctly in `docs/COVERAGE-MAP.md:47-54`: the claim is **not verified** and is
+Already documented correctly in `docs/COVERAGE-MAP.md`, section "Current state (live)", bullet
+"Unproven factor — the headers": the claim is **not verified** and is
 **contradicted for `comments.createComment`** by this repo's own code —
 `create_comment_browserless` posts the SDUI route (`_SDUI_COMMENT_URL`, `mcp/lib/client.py:161-162`)
 through `self._vg().post(url, body, is_json=False)` (`mcp/lib/client.py:242`), i.e. **with** the
 Voyager headers rather than via `_sdui_min_headers()`, and that path is documented as live 200
 (`mcp/lib/client.py:159-160`, `:191`). The two header paths are covered by *separate* offline tests:
-`mcp/tests/test_client.py:368-375` pins the vgreq path by reading the call out of the faked `vgreq`
+`mcp/tests/test_client.py:374-381` pins the vgreq path by reading the call out of the faked `vgreq`
 module's `calls["post"]`, while the minimal-header path is exercised in other tests that monkeypatch
 `requests.post` and `_sdui_min_headers`. Note what that does **not** give us: no test holds the
 headers as the single changing variable, which is precisely why the experiment below is still open.
 The claim survives as an assertion only in the `_sdui_min_headers` docstring
-(`mcp/lib/client.py:377-381`) and is tracked in `docs/BACKLOG.md`.
+(`mcp/lib/client.py:401-405`) and is tracked in `docs/BACKLOG.md`.
 
 **Consequence for this taxonomy: L4b is not an error class.** Do not route a 500 to a
 "wrong headers" diagnosis. The one-variable experiment that would settle it is written out in
-`docs/COVERAGE-MAP.md:59-65`; until it has run, only the **body** factor is isolated.
+`docs/COVERAGE-MAP.md`, section "Current state (live)", bullet "The one-variable test that would
+settle it"; until it has run, only the **body** factor is isolated.
 
 Unresolved next door (ABSENT, never reconciled): `docs/03-SDUI-API.md:51-64` lists **ten** required
-SDUI headers, while `_sdui_min_headers()` sends **three** (`mcp/lib/client.py:387-388`) and reaches
-live 200. One of the two is wrong; the repo does not say which — noted the same way at
-`docs/COVERAGE-MAP.md:64-65`.
+SDUI headers, while `_sdui_min_headers()` sends **three** (`mcp/lib/client.py:411-412`) and reaches
+live 200. One of the two is wrong; the repo does not say which — noted the same way in the closing
+sentence of that same "one-variable test" bullet in `docs/COVERAGE-MAP.md`.
 
 ### 3.2 "SDUI 500 because `currentActor` is missing" — observation yes, cause no
 
-The 500 is real; the cause is **explicitly rejected in this repo**. `mcp/lib/client.py:409-410`:
+The 500 is real; the cause is **explicitly rejected in this repo**. `mcp/lib/client.py:433-434`:
 the old code 500'd "not because of a missing currentActor binding (that field is empty in the real
-browser request too)". `docs/COVERAGE-MAP.md:38-40` calls the "needs a browser" story
+browser request too)". The "Key finding" paragraph in `docs/COVERAGE-MAP.md`, section
+"Current state (live)", calls the "needs a browser" story
 "a **red herring**".
 
 **Carry it as one class, `SduiReplayIncomplete`, merged with L4 and with no cause claim.** The
@@ -437,6 +440,7 @@ because none of that exists. Every field in this document is unheld until its te
 
 **The one call that would prove any of it: none is needed for §1 or §2.** All of it is derivable
 from the local cookie file and from response metadata. The **only** proving live call in this area
-is the one-variable header experiment of §3.1 (`docs/COVERAGE-MAP.md:59-65`) — a like/unlike on the
+is the one-variable header experiment of §3.1 (`docs/COVERAGE-MAP.md`, section "Current state
+(live)", bullet "The one-variable test that would settle it") — a like/unlike on the
 owner's own post, reversible, no third party — and it settles L4b, not the taxonomy itself. It is
 the owner's decision, not an agent's.

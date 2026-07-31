@@ -68,7 +68,10 @@ uv pip install --python .venv/bin/python fastmcp patchright requests
 `get_notifications`, `get_conversations`, `get_connections_summary`, `get_post_comments`,
 `get_link_preview`.
 **Posts:** `create_post` (+`poll_urn`), `edit_post`, `delete_post`, `create_poll`, `save_post`,
-`repost`, `delete_repost`.
+`repost`, `delete_repost` — the last one is **not operational**: its `queryId` hash is missing, so it
+returns `status: "not_configured"` / `ok: False` / `retryable: False` **without sending the delete
+request** — the client method makes no call at all, the tool still runs its `ensure_session()` GET
+on `/me` first (`../docs/10-POST-INTERACTIONS.md`, `../docs/BACKLOG.md`).
 **Engagement:** `like` (browserless 201), `unlike` (browser-reliable).
 **Messaging:** `send_dm`, `recall_message`, `react_to_message`.
 **Network:** `follow_company`, `connect`, `endorse_skill`, `remove_connection`.
