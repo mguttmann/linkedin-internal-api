@@ -137,7 +137,7 @@ re-capture path (`tools/capture_write_action.py`) — **without sending the dele
 (`mcp/lib/client.py:776-784`). Mind the layer: the *client method* sends nothing at all, held by a
 test that counts calls on a fake `vgreq` and requires zero get/post/delete
 (`mcp/tests/test_client.py:544`); the *tool* still emits the `ensure_session()` GET on `/me` first
-(`mcp/server.py:298`), so the claim is "no mutating call", not "an empty wire"
+(`mcp/server.py:312`, in `delete_repost`), so the claim is "no mutating call", not "an empty wire"
 (`10-POST-INTERACTIONS.md`). Offline-proven, **not yet live-tested**; the tool stays **[O]** until a
 captured hash exists.
 

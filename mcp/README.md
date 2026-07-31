@@ -17,12 +17,16 @@ Design + rationale: **`../docs/MCP-DESIGN.md`**.
 - ✅ **Writes live-verified browserless:** `like` (201), `create_post`/`edit_post`/`create_poll`
   (posted→edited→deleted end-to-end), `save_post`, `send_dm`+`recall_message` (send 200→recall
   204), `follow_company`, `endorse_skill` (200), `connect`, `remove_connection`.
-- ⚠️ **`unlike`:** endpoint captured; pure-requests replay returns 500 (needs the browser's
-  `currentActor` binding) — the tool reports this honestly, browser path is reliable.
-  `repost` shares this limitation (browser-only headless).
-- 🔒 Guardrails: people-facing / destructive tools (`create_post`, `edit_post`, `delete_post`,
-  `send_dm`, `recall_message`, `repost`, `delete_repost`, `connect`, `remove_connection`)
-  require `confirm=True`.
+- ✅ **`unlike` works browserless** (live 200, reaction gone). The older note here — "500, needs the
+  browser's `currentActor` binding, browser path is reliable" — was wrong on all three counts: the
+  `currentActor` story is a red herring (the field is empty in the real browser request too), the
+  fix was replaying the **full captured body**, and **there is no browser path**: `01980e5` removed
+  every browser code path from this server. See `unlike` in `mcp/lib/client.py`.
+- ⚠️ **`repost`:** its SDUI replay can still return 500. The tool reports that honestly and there is
+  no fallback — re-capture the full body as a template (the pattern that fixed `unlike`).
+- 🔒 Guardrails: **every** writing tool requires `confirm=True`; without it the call returns
+  `{"needs_confirmation": True, …}` and sends nothing. A rule, not a list — a list goes stale as
+  soon as a tool is added, and the read/write split is held by a test.
 - 🔒 **Read-only mode:** `LINKEDIN_READ_ONLY=1` blocks **every** writing tool outright (it raises;
   reads keep working). Recommended default for cron / unattended agents. Offline-proven, not yet
   live-tested — full reference incl. its honest limit: `../docs/26-READ-ONLY-MODE.md`.

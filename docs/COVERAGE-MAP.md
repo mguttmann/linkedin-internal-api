@@ -31,9 +31,13 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
 - *Network:* `follow_company`, `connect`, `endorse_skill` (browserless 200), `remove_connection`
 - *Session:* `session_status` (also reports `read_only`), `refresh_session`
 
-**Guardrails on the write surface:** people-facing / destructive tools require `confirm=True`, and
+**Guardrails on the write surface:** **every** writing tool requires `confirm=True` — since
+2026-07-31 the last seven (`like`, `unlike`, `follow_company`, `endorse_skill`, `save_post`,
+`create_poll`, `react_to_message`) are gated as well, so no write fires on the first call — and
 `LINKEDIN_READ_ONLY=1` blocks **every** writing tool of the MCP server outright (reads unaffected)
-— the recommended default for cron / unattended agents. Offline-proven, not yet live-tested; scope
+— the recommended default for cron / unattended agents. The two locks are independent and their
+order is fixed: the read-only gate answers **first**, so `confirm=True` never buys a write while the
+flag is set. Offline-proven per tool with the transport counted, not yet live-tested; scope
 and honest limit in `26-READ-ONLY-MODE.md`.
 
 **Honesty of the write results (added 2026-07-31):** a GraphQL write can answer HTTP 200 and still
@@ -88,7 +92,7 @@ more than the evidence carries):
 | Post **poll** | `PollsPollSummary`→`Shares` URN_REFERENCE | ✅ MCP `create_poll` + `create_post(poll_urn)` (browserless live) |
 | Edit an existing post | `Shares` + `resourceKey`/`updateUrn` | ✅ MCP `edit_post` (browserless live) |
 | **Repost** (instant) | SDUI `feed.requests.createInstantRepost` | ✅ MCP `repost` (browser-only, 500 headless) |
-| Delete repost | Voyager `graphql voyagerFeedDashReposts` (delete-by-key) | 🔍 endpoint captured **via browser**; MCP `delete_repost` is **not operational** (queryId carries no hash — `mcp/lib/client.py:766`) + no read maps repost→share. Since 2026-07-31 it **fails honestly without sending the delete request** (`status: "not_configured"`, `retryable: False`, re-capture path in the note — `mcp/lib/client.py:776-784`). The client method sends nothing at all — zero get/post/delete (`mcp/tests/test_client.py:544`); at **tool** level the `ensure_session()` GET on `/me` still runs (`mcp/server.py:298`), so the claim is "no mutating call", not "an empty wire" — `10-POST-INTERACTIONS.md`. `BACKLOG.md` |
+| Delete repost | Voyager `graphql voyagerFeedDashReposts` (delete-by-key) | 🔍 endpoint captured **via browser**; MCP `delete_repost` is **not operational** (queryId carries no hash — `mcp/lib/client.py:766`) + no read maps repost→share. Since 2026-07-31 it **fails honestly without sending the delete request** (`status: "not_configured"`, `retryable: False`, re-capture path in the note — `mcp/lib/client.py:776-784`). The client method sends nothing at all — zero get/post/delete (`mcp/tests/test_client.py:544`); at **tool** level the `ensure_session()` GET on `/me` still runs (`mcp/server.py:312`), so the claim is "no mutating call", not "an empty wire" — `10-POST-INTERACTIONS.md`. `BACKLOG.md` |
 | Quote repost (with thoughts) | `voyagerContentcreationDashShares` + reshare ref | ⏳ |
 | **Save / unsave** post | SDUI `update.saveState` `{isSaved}` | ✅ MCP `save_post` (browserless live) |
 | Report post | ? (blocklisted in crawler) | ❌ |

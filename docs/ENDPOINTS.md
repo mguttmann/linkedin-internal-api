@@ -55,7 +55,7 @@ suffix first (`mcp/lib/client.py:776`) and returns `status: "not_configured"` / 
 `retryable: False` with the re-capture path, **without sending the delete request**. The client
 method makes no transport call at all — zero get/post/delete, offline-proven
 (`mcp/tests/test_client.py:544`); at **tool** level the `ensure_session()` GET on `/me` still runs
-(`mcp/server.py:298`), so the honest claim is "no mutating call", not "an empty wire". Not
+(`mcp/server.py:312`, in `delete_repost`), so the honest claim is "no mutating call", not "an empty wire". Not
 live-tested. Both gaps above stay open.
 
 ### Messaging (Voyager; send/recall are browserless-verified, react is not)

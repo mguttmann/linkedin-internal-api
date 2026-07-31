@@ -121,9 +121,10 @@ flowchart LR
 | **Network** | `follow_company` · `connect` · `endorse_skill` · `remove_connection` |
 | **Session** | `session_status` · `refresh_session` |
 
-🔒 **Guardrails:** people-facing / destructive tools (`create_post`, `edit_post`, `delete_post`,
-`send_dm`, `recall_message`, `repost`, `delete_repost`, `connect`, `remove_connection`) require
-`confirm=True`.
+🔒 **Guardrails:** **every** writing tool requires `confirm=True` — without it the call returns
+`{"needs_confirmation": True, …}` naming what would happen, and sends nothing. Stated as a rule
+rather than a list on purpose: a list goes stale the moment a tool is added. The read/write split
+itself is held by a test, so a new writing tool cannot slip through ungated.
 
 🔒 **Read-only mode** — `LINKEDIN_READ_ONLY=1` blocks **every** writing tool of the server outright
 (it raises; reads keep working). The recommended default for a cron job or an unattended agent that

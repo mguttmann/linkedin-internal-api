@@ -88,7 +88,7 @@ Body: {
 - **Which layer sends nothing — read this before quoting the zero-call result.** *Zero calls* is a
   statement about `LinkedInClient.delete_repost()`. The MCP **tool** `server.delete_repost()` still
   runs `li.ensure_session()` first, which is a **GET** on `/voyager/api/me`
-  (`mcp/server.py:298`), and only then does the client method refuse. So: no request to the delete
+  (`mcp/server.py:312`, in `delete_repost`), and only then does the client method refuse. So: no request to the delete
   endpoint, no mutating call at all — but not literally an empty wire at tool level. The read-only
   suite therefore asserts `not _mutating(transport)` for this one tool
   (`mcp/tests/test_readonly.py:343`), and the file itself warns that "a GET is NOT proof of a write"

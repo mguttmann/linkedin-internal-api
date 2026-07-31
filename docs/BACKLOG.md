@@ -108,7 +108,7 @@ What changed: `delete_repost` checks the `.<hash>` suffix first (`_qid_has_hash`
 layer: the **client method** makes no transport call at all — proven offline by a test that counts
 `post`/`get`/`delete` on a fake `vgreq` and requires all three empty
 (`mcp/tests/test_client.py:544`); the **tool** `server.delete_repost()` still emits the
-`ensure_session()` GET on `/me` before the refusal (`mcp/server.py:298`), so what holds end-to-end is
+`ensure_session()` GET on `/me` before the refusal (`mcp/server.py:312`), so what holds end-to-end is
 "no mutating call", not "an empty wire". No hash was invented. Not live-tested (there is no session).
 **What is still missing is exactly the two items below** — one capture run closes both.
 
@@ -138,11 +138,12 @@ URL-shape test like the existing `test_get_my_posts_uses_exact_captured_url_shap
 **When the hash arrives:** setting `_REPOST_DEL_QID` to the captured `<family>.<hash>` re-enables the
 call automatically — the guard is a suffix check, not a feature flag. Two existing tests then still
 apply: the frozen URL+body (`mcp/tests/test_client.py:578`) and the `data.errors` check on the
-response (`:535`). The `NOT_OPERATIONAL` set in `mcp/tests/test_readonly.py:332` must be emptied in
+response (`:535`). The `NOT_OPERATIONAL` set in `mcp/tests/test_readonly.py` must be emptied in
 the same change, otherwise the flag-off test keeps expecting the tool to send **no mutating call**
-(`assert not _mutating(transport)`, `:343`) instead of requiring the write to arrive. Note the layer
+(`assert not _mutating(transport)` in
+`::test_without_the_flag_writes_reach_the_transport`) instead of requiring the write to arrive. Note the layer
 while reading that assert: it does **not** claim "nothing sent" — at tool level the
-`ensure_session()` GET on `/me` still goes out (`mcp/server.py:298`). "Nothing at all" is a claim
+`ensure_session()` GET on `/me` still goes out (`mcp/server.py:312`). "Nothing at all" is a claim
 about the client method only and is held one layer down (`mcp/tests/test_client.py:544`).
 
 ## 🔩 react_to_message — HTTP 500, cause open (and it is NOT an SDUI route)
@@ -250,9 +251,9 @@ change and therefore out of scope by rule. Each has file + symptom + basis.
    *look* complete.
 5. **Stale tool counts ("26 tools")** — already tracked as its own entry above. Not corrected in this
    ticket either: no test holds those numbers in the affected files.
-6. **Seven writing tools without a confirm gate** — already tracked as its own entry above; it is an
-   **owner decision** (`endorse_skill` writes on a third party's profile), not something to change
-   unilaterally.
+6. **Seven writing tools without a confirm gate** — **resolved 2026-07-31** by owner decision (all
+   nineteen writes are now `confirm`-gated); see the entry below for what was built and for the
+   follow-ups found while building it.
 7. **The standalone runner of `mcp/tests/test_client.py` is broken.**
    `python mcp/tests/test_client.py` raises
    `TypeError: test_delete_comment_force_bypasses_guard() missing 1 required positional argument:
@@ -376,17 +377,53 @@ cover code anchors too. That is the ticket to write; grandfathering is not.
 **To close:** convert the remaining `<file>.md:<line>` references to file + section as their
 surrounding prose is next touched, and build the quoted-anchor version above. Neither is started.
 
-## ⏳ Seven writing tools have no `confirm` gate
+## 🔍 Seven writing tools had no `confirm` gate — implemented 2026-07-31, offline-proven, NOT live-tested
 
-**Status:** observation, deliberately unchanged (2026-07-30) — needs an owner decision.
+**Status:** closed 2026-07-31 by owner decision — two independent locks, not one. Offline-proven,
+**not** live-tested (there is no session in this repo), so nothing here is ✅ *verified*.
 
 `like`, `unlike`, `follow_company`, `endorse_skill`, `save_post`, `create_poll` and
-`react_to_message` fire a real write on the **first** call; the other twelve writes require
-`confirm=True`. `endorse_skill` is the sharpest case: it writes on a **third party's** profile.
-`LINKEDIN_READ_ONLY` now covers all seven in unattended operation, but with the flag off they are
-still one call away.
-**To decide:** whether these get `confirm=True` as well (changes the tool contract for every
-existing caller) or stay ungated by intent. Not a defect — a design decision.
+`react_to_message` used to fire a real write on the **first** call while the other twelve writes
+required `confirm=True`; `endorse_skill` was the sharpest case, writing on a **third party's**
+profile. All seven now carry `confirm: bool = False` and return `{"needs_confirmation": True, …}`
+before the session probe and before any transport call — the tool contract changed for every
+existing caller, deliberately. The `needs_confirmation` payload names the identifying arguments only
+and, for the toggles, the **direction** (`follow=True|False`, `save=True|False`, `action: "unlike"`).
+The read-only flag remains the outer, first-answering lock. Scope, tests and honest limits:
+`26-READ-ONLY-MODE.md`, section "All nineteen writes are `confirm`-gated".
+
+**Found while building this, deliberately NOT fixed here** (each is one sentence by ticket rule; all
+pre-existing classes that this change widened from twelve tools to nineteen, none introduced by it):
+
+1. **`react_to_message` cannot show its direction.** The payload carries a constant `toggle: True`,
+   so a confirming caller cannot see whether the reaction is being *added* or *removed*; offline the
+   direction is not knowable without an extra read, so the honest options are a speaking field value
+   or a docstring half-sentence, not a guess.
+2. **`if not confirm` is truthiness-based, and only Pydantic makes it fail-closed.** A *direct
+   module* call with `confirm="false"` passes the gate and writes, while the same call through
+   `mcp.call_tool` — the path an agent actually takes — is coerced to `False` and blocked; measured
+   offline with a counted transport, but **no test pins that coercion**, in contrast to
+   `read_only_enabled()`, which is parametrised over 20+ values.
+3. **`endorse_skill` confirms less than it sends.** The payload echoes `vanity_name` + `skill_id`
+   while the outgoing SDUI body identifies the person by `vanityName` **and** `profileId`, so a
+   swapped or hallucinated `profile_id` passes the confirmation invisibly — which of the two ids
+   LinkedIn treats as authoritative is not answerable offline.
+4. **A confirmation binds nothing.** The gate checks only that `confirm` *exists*: a caller may have
+   harmless arguments confirmed and then send different ones with `confirm=True`, because there is no
+   nonce, token or hash tying the second call to the first — the structural limit of the whole
+   confirm model, all nineteen tools.
+5. **Positional arguments can set `confirm` implicitly.** For `like` and `unlike`, `confirm` is the
+   second positional parameter, so `server.like(urn, True)` writes without the keyword ever being
+   named (measured: one mutating call each); for the other five a positional `True` lands on
+   `follow`/`save`/`duration`/`emoji` and the gate still holds.
+6. **A code comment in the test file is off by one:** `mcp/tests/test_readonly.py` cites
+   `mcp/server.py:311` for the `ensure_session()` GET in `delete_repost`; the call is on `:312`
+   (`:311` is the `needs_confirmation` return) — the citation-rot class above, produced by this very
+   ticket while updating an anchor by hand.
+7. **Two instance lists in NON-TARGET files now understate the protection:** `README.md` and
+   `mcp/README.md` each name nine tools that require `confirm=True`, where it is now all nineteen;
+   the error direction is the safe one (a reader expects less protection than exists), and the
+   durable fix is the class wording `COVERAGE-MAP.md` uses, not a longer list.
 
 ## ⏳ Session age / cookie inventory in `session_status` — designed, NOT built
 

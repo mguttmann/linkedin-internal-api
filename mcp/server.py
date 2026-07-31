@@ -215,25 +215,33 @@ def refresh_session() -> dict:
 # ── Engagement writes (verified endpoints, live-captured bodies) ─────────
 @mcp.tool
 @write_tool
-def like(activity_urn: str) -> dict:
-    """Like a post by its activity URN (e.g. urn:li:activity:123…). Verified endpoint."""
+def like(activity_urn: str, confirm: bool = False) -> dict:
+    """Like a post by its activity URN (e.g. urn:li:activity:123…). Verified endpoint.
+    People-facing → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "activity_urn": activity_urn}
     li.ensure_session()
     return li.like(activity_urn)
 
 
 @mcp.tool
 @write_tool
-def unlike(activity_urn: str) -> dict:
-    """Remove your LIKE reaction from a post by its activity URN. Verified endpoint."""
+def unlike(activity_urn: str, confirm: bool = False) -> dict:
+    """Remove your LIKE reaction from a post by its activity URN. Verified endpoint.
+    People-facing → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "activity_urn": activity_urn, "action": "unlike"}
     li.ensure_session()
     return li.unlike(activity_urn)
 
 
 @mcp.tool
 @write_tool
-def follow_company(company_id: str, follow: bool = True) -> dict:
+def follow_company(company_id: str, follow: bool = True, confirm: bool = False) -> dict:
     """Follow (follow=True) or unfollow (follow=False) a company by its numeric id.
-    Browserless, verified endpoint."""
+    Browserless, verified endpoint. People-facing → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "company_id": company_id, "follow": follow}
     li.ensure_session()
     return li.follow_company(company_id, follow)
 
@@ -251,9 +259,13 @@ def connect(member_urn: str, note: str = "", confirm: bool = False) -> dict:
 
 @mcp.tool
 @write_tool
-def endorse_skill(vanity_name: str, profile_id: str, skill_id: str) -> dict:
+def endorse_skill(vanity_name: str, profile_id: str, skill_id: str,
+                  confirm: bool = False) -> dict:
     """Endorse a skill on someone's profile. vanity_name+profile_id identify the person,
-    skill_id is the skill's position id. Browserless, verified."""
+    skill_id is the skill's position id. Browserless, verified.
+    Writes on a FOREIGN profile → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "vanity_name": vanity_name, "skill_id": skill_id}
     li.ensure_session()
     return li.endorse_skill(vanity_name, profile_id, skill_id)
 
@@ -271,9 +283,11 @@ def remove_connection(vanity_name: str, first_name: str = "", last_name: str = "
 
 @mcp.tool
 @write_tool
-def save_post(activity_id: str, save: bool = True) -> dict:
+def save_post(activity_id: str, save: bool = True, confirm: bool = False) -> dict:
     """Save (save=True) or unsave (save=False) a post for later, by its numeric activity id.
-    Browserless, verified."""
+    Browserless, verified. Requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "activity_id": activity_id, "save": save}
     li.ensure_session()
     return li.save_post(activity_id, save)
 
@@ -324,9 +338,14 @@ def edit_post(activity_id: str, share_id: str, text: str, confirm: bool = False)
 
 @mcp.tool
 @write_tool
-def create_poll(question: str, options: list, duration: str = "ONE_WEEK") -> dict:
+def create_poll(question: str, options: list, duration: str = "ONE_WEEK",
+                confirm: bool = False) -> dict:
     """Create a poll (returns its pollSummary URN). options: 2–4 strings; duration:
-    ONE_DAY/THREE_DAYS/ONE_WEEK/TWO_WEEKS. Pass the returned poll_urn to create_post to publish."""
+    ONE_DAY/THREE_DAYS/ONE_WEEK/TWO_WEEKS. Pass the returned poll_urn to create_post to publish.
+    People-facing → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "question": question, "options": options,
+                "duration": duration}
     li.ensure_session()
     return li.create_poll(question, options, duration)
 
@@ -364,8 +383,12 @@ def recall_message(message_urn: str, confirm: bool = False) -> dict:
 
 @mcp.tool
 @write_tool
-def react_to_message(message_urn: str, emoji: str = "👏") -> dict:
-    """React to a message with an emoji (toggle: re-send the same emoji to remove it)."""
+def react_to_message(message_urn: str, emoji: str = "👏", confirm: bool = False) -> dict:
+    """React to a message with an emoji (toggle: re-send the same emoji to remove it).
+    People-facing → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "message_urn": message_urn, "emoji": emoji,
+                "toggle": True}
     li.ensure_session()
     return li.react_to_message(message_urn, emoji)
 

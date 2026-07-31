@@ -5,6 +5,11 @@ Every test here ENFORCES the constraint instead of assuming it: the transport is
 write that slipped through the gate would be visible, not silent. No network, no cookie file,
 no browser.
 
+Two INDEPENDENT locks are proven here: LINKEDIN_READ_ONLY (the operating mode, cron safety) and
+the per-tool confirm gate (the interactive case, where read-only is deliberately off). The order
+matters and is asserted: the outer read-only gate fires FIRST, so confirm=True never buys a write
+under read-only.
+
 The gate is proven on BOTH paths: the module-level function (what a direct import sees) and
 `mcp.call_tool` — the MCP boundary an agent actually goes through. They are the same object
 today, but that is a consequence of decorator order, not a guarantee.
@@ -39,30 +44,33 @@ READ_CALLS = {
     "refresh_session": lambda: server.refresh_session(),
 }
 
-# The 19 writing tools — ALL blocked under read-only. confirm=True is passed wherever the tool
-# has a confirm gate, otherwise the test would only re-test the confirm gate (proof worthless).
+# The 19 writing tools — ALL blocked under read-only. Every one of them now carries a confirm
+# gate, so confirm=True is passed for EVERY entry: without it these tests would stop at the
+# confirm gate and prove nothing about read-only (the proof would be silently worthless).
+# test_every_write_tool_is_called_with_confirm_true holds that property mechanically.
 # Kwargs, not lambdas: the SAME argument set is replayed through the module-level function and
 # through mcp.call_tool, so neither path can drift away from the other untested.
 WRITE_KWARGS = {
     "create_comment": {"activity_urn": _URN, "text": "text", "confirm": True},
     "delete_comment": {"comment_id": "222", "activity_urn": _URN, "confirm": True},
-    "like": {"activity_urn": _URN},
-    "unlike": {"activity_urn": _URN},
-    "follow_company": {"company_id": "1035"},
+    "like": {"activity_urn": _URN, "confirm": True},
+    "unlike": {"activity_urn": _URN, "confirm": True},
+    "follow_company": {"company_id": "1035", "confirm": True},
     "connect": {"member_urn": "urn:li:fsd_profile:X", "confirm": True},
-    "endorse_skill": {"vanity_name": "other-user", "profile_id": "OTHER_ID", "skill_id": "48"},
+    "endorse_skill": {"vanity_name": "other-user", "profile_id": "OTHER_ID", "skill_id": "48",
+                      "confirm": True},
     "remove_connection": {"vanity_name": "other-user", "confirm": True},
-    "save_post": {"activity_id": "999"},
+    "save_post": {"activity_id": "999", "confirm": True},
     "repost": {"activity_id": "999", "confirm": True},
     "delete_repost": {"repost_urn": "urn:li:activity:2", "confirm": True},
     "create_post": {"text": "hello", "confirm": True},
     "edit_post": {"activity_id": "222", "share_id": "333", "text": "new text", "confirm": True},
-    "create_poll": {"question": "Q?", "options": ["A", "B"]},
+    "create_poll": {"question": "Q?", "options": ["A", "B"], "confirm": True},
     "delete_post": {"activity_id": "222", "tracking_id": "trk", "confirm": True},
     "send_dm": {"conversation_urn": "urn:li:msg_conversation:(urn:li:fsd_profile:ME,1)",
                 "text": "hi", "confirm": True},
     "recall_message": {"message_urn": "urn:li:msg_message:(x,2)", "confirm": True},
-    "react_to_message": {"message_urn": "urn:li:msg_message:(x,2)"},
+    "react_to_message": {"message_urn": "urn:li:msg_message:(x,2)", "confirm": True},
     "react_to_comment": {"comment_id": "888", "activity_urn": _URN, "confirm": True},
 }
 
@@ -323,10 +331,131 @@ def test_without_the_flag_confirm_gates_behave_exactly_as_before(monkeypatch, tr
     assert _sent(transport) == [], "confirm gates must still send nothing"
 
 
+# ── confirm gate: the second, independent lock (LINKEDIN_READ_ONLY is the first) ──────────
+# The seven tools that had no confirm gate before this change (mcp/server.py:218, :229, :240,
+# :262, :286, :341, :386). Per case: tool name, kwargs WITHOUT confirm, and the fields the caller
+# must see echoed back — for the toggles the echo must name the DIRECTION (follow/save), so
+# confirming cannot fire the opposite of what was shown.
+NEW_CONFIRM_GATES = {
+    "like": ("like", {"activity_urn": _URN}, {"activity_urn": _URN}),
+    "unlike": ("unlike", {"activity_urn": _URN}, {"activity_urn": _URN, "action": "unlike"}),
+    "follow": ("follow_company", {"company_id": "1035"},
+               {"company_id": "1035", "follow": True}),
+    "unfollow": ("follow_company", {"company_id": "1035", "follow": False},
+                 {"company_id": "1035", "follow": False}),
+    "endorse_skill": ("endorse_skill",
+                      {"vanity_name": "other-user", "profile_id": "OTHER_ID", "skill_id": "48"},
+                      {"vanity_name": "other-user", "skill_id": "48"}),
+    "save": ("save_post", {"activity_id": "999"}, {"activity_id": "999", "save": True}),
+    "unsave": ("save_post", {"activity_id": "999", "save": False},
+               {"activity_id": "999", "save": False}),
+    "create_poll": ("create_poll", {"question": "Q?", "options": ["A", "B"]},
+                    {"question": "Q?", "options": ["A", "B"], "duration": "ONE_WEEK"}),
+    "react_to_message": ("react_to_message", {"message_urn": "urn:li:msg_message:(x,2)"},
+                         {"message_urn": "urn:li:msg_message:(x,2)", "emoji": "👏",
+                          "toggle": True}),
+}
+
+
+@pytest.mark.parametrize("case", sorted(NEW_CONFIRM_GATES))
+def test_new_confirm_gates_block_and_send_nothing(case, monkeypatch, transport):
+    """Without confirm=True the tool must return needs_confirmation and reach NO transport.
+
+    Counted, not inferred: the assertion is on the recorded call log, so a gate placed AFTER
+    li.ensure_session() (which GETs /me) would fail here.
+    """
+    monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
+    tool, kwargs, echoed = NEW_CONFIRM_GATES[case]
+    out = getattr(server, tool)(**kwargs)
+    assert out.get("needs_confirmation") is True, f"{case} acted without confirm=True"
+    for key, value in echoed.items():
+        assert out.get(key) == value, f"{case}: needs_confirmation must echo {key}={value!r}"
+    # WHITELIST, not a blacklist: the payload may contain NOTHING beyond the identifying
+    # arguments. A blacklist of forbidden substrings (see the leak test below) cannot catch a
+    # field nobody thought of — a cookie path under an unforeseen key, a leaked profile_id, or an
+    # `action` marker copied onto the wrong tool would all slip through it. This holds for every
+    # future NEW_CONFIRM_GATES entry automatically.
+    assert set(out) == {"needs_confirmation"} | set(echoed), \
+        f"{case}: payload must name ONLY the identifying arguments, got {sorted(out)}"
+    assert _sent(transport) == [], f"{case} must issue ZERO outgoing calls without confirm"
+
+
+@pytest.mark.parametrize("case", sorted(NEW_CONFIRM_GATES))
+def test_new_confirm_gates_hold_at_the_mcp_boundary(case, monkeypatch, transport):
+    # Same reasoning as the read-only boundary test: the registry is the path an agent uses.
+    monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
+    tool, kwargs, _ = NEW_CONFIRM_GATES[case]
+    res = asyncio.run(server.mcp.call_tool(tool, dict(kwargs)))
+    assert res.structured_content["needs_confirmation"] is True
+    assert _sent(transport) == [], f"{case} must issue ZERO outgoing calls without confirm"
+
+
+def test_new_confirm_gates_never_leak_cookies_or_paths(monkeypatch, transport):
+    # The confirmation payload names the identifying ARGUMENTS only — no cookie values, no
+    # file paths, no server internals (docs/MCP-DESIGN.md §5 / project rule 5).
+    monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
+    for case in sorted(NEW_CONFIRM_GATES):
+        tool, kwargs, _ = NEW_CONFIRM_GATES[case]
+        blob = repr(getattr(server, tool)(**kwargs))
+        for forbidden in ("li_at", "JSESSIONID", "csrf", "Cookie", "/tmp/", "ajax:"):
+            assert forbidden not in blob, f"{case}: {forbidden!r} must not appear in the payload"
+
+
+@pytest.mark.parametrize("name", sorted(WRITE_KWARGS))
+def test_every_write_tool_has_a_confirm_gate_defaulting_to_false(name):
+    """Class-closing: a write tool without confirm — or with confirm defaulting to True — fails
+    HERE. This is the property Manuel asked for (two independent locks), not a per-tool list."""
+    import inspect as _inspect
+    params = _inspect.signature(getattr(server, name)).parameters
+    assert "confirm" in params, f"{name} has no confirm gate"
+    assert params["confirm"].default is False, f"{name}: confirm must default to False"
+
+
+@pytest.mark.parametrize("name", sorted(WRITE_KWARGS))
+def test_every_write_tool_is_called_with_confirm_true(name):
+    """Guards the read-only proof itself: if a WRITE_KWARGS entry ever dropped confirm=True, the
+    read-only tests above would stop at the confirm gate and silently prove nothing."""
+    assert WRITE_KWARGS[name].get("confirm") is True, \
+        f"{name}: WRITE_KWARGS must pass confirm=True or the read-only proof is worthless"
+
+
+@pytest.mark.parametrize("name", sorted(WRITE_KWARGS))
+def test_read_only_wins_over_confirm(name, monkeypatch, transport):
+    """ORDER IS THE SECURITY STATEMENT: the outer @write_tool gate must fire FIRST. Under
+    read-only a call WITH confirm=True must raise ToolError and send nothing — it must not be
+    let through, and it must not merely return a needs_confirmation dict either."""
+    monkeypatch.setenv("LINKEDIN_READ_ONLY", "1")
+    assert WRITE_KWARGS[name].get("confirm") is True  # premise of this test
+    with pytest.raises(ToolError) as ei:
+        _call_write(name)
+    _assert_block_message(str(ei.value), name)
+    assert _mutating(transport) == [], f"{name}: confirm=True must not buy a write under read-only"
+    assert _sent(transport) == [], f"{name} must issue ZERO outgoing calls under read-only"
+
+
+@pytest.mark.parametrize("case", sorted(NEW_CONFIRM_GATES))
+def test_read_only_wins_even_without_confirm(case, monkeypatch, transport):
+    """The other half of the ORDER proof: confirm OMITTED, read-only ON.
+
+    test_read_only_wins_over_confirm only covers confirm=True, where a swapped order would show
+    up as a write. With confirm missing, a body-first order would return a harmless-looking
+    needs_confirmation dict instead of raising — the failure signature that test's own docstring
+    names but never exercises. The outer @write_tool gate must answer FIRST regardless of
+    confirm, so read-only always reports read-only and never the confirm prompt.
+    """
+    monkeypatch.setenv("LINKEDIN_READ_ONLY", "1")
+    tool, kwargs, _ = NEW_CONFIRM_GATES[case]
+    assert "confirm" not in kwargs  # premise of this test
+    with pytest.raises(ToolError) as ei:
+        getattr(server, tool)(**kwargs)
+    _assert_block_message(str(ei.value), tool)
+    assert _sent(transport) == [], f"{case} must issue ZERO outgoing calls under read-only"
+
+
 # Write tools that are gated like every other write but deliberately send NO MUTATING call:
 # their request cannot succeed as configured, so the client refuses before the transport
 # (client.py delete_repost — the repost-delete queryId hash is in no capture). At THIS (tool)
-# level the ensure_session() GET on /me still goes out (mcp/server.py:298); the client method
+# level the ensure_session() GET on /me still goes out (mcp/server.py:311); the client method
 # itself sends nothing at all — that is asserted one layer down in
 # mcp/tests/test_client.py:544 (get + post + delete all empty).
 NOT_OPERATIONAL = {"delete_repost"}
