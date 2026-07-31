@@ -668,6 +668,180 @@ class LinkedInClient:
             out["error"] = "post failed — queryId hash may be stale (re-grab via capture)"
         return out
 
+    def upload_video(self, video_path: str) -> dict:
+        """Upload a video file to LinkedIn (browserless, 3-step flow, docs/24).
+        1) register upload -> asset URN + upload URL + recipes
+        2) PUT the raw file bytes to the upload URL
+        3) return {ok, asset_urn, recipes} ready to pass to create_post(media=...).
+        Does NOT create the post — call create_post_with_video for the full flow.
+        """
+        import os as _os
+        import requests as _rq
+        if not _os.path.isfile(video_path):
+            return {"ok": False, "error": f"file not found: {video_path}"}
+        fsize = _os.path.getsize(video_path)
+        fname = _os.path.basename(video_path)
+        # 1) register
+        url = f"{BASE}/voyagerVideoDashMediaUploadMetadata?action=upload"
+        body = {"mediaUploadType": "VIDEO_SHARING", "fileSize": fsize, "filename": fname}
+        r = self._vg().post(url, body)
+        if r.status_code not in (200, 201):
+            return {"ok": False, "step": "register", "status": r.status_code,
+                    "error": r.text[:200]}
+        val = (r.json().get("data", {}) or {}).get("value", {}) or {}
+        asset_urn = val.get("urn")
+        recipes = val.get("recipes", [])
+        parts = val.get("partUploadRequests", []) or []
+        if not asset_urn or not parts:
+            return {"ok": False, "step": "register", "error": "no asset/upload URL in response",
+                    "raw": r.text[:300]}
+        # 2) PUT each part (LinkedIn splits video into ~4 MB byte-range chunks) and collect ETags
+        _, cookie_str = __import__("importlib").import_module("vgreq")._load()
+        with open(video_path, "rb") as fh:
+            data = fh.read()
+        etags = []
+        for i, part in enumerate(parts):
+            first = part.get("firstByte", 0)
+            last = part.get("lastByte", len(data) - 1)
+            chunk = data[first:last + 1]
+            hdrs = dict(part.get("headers", {"Content-Type": "application/octet-stream"}))
+            hdrs["cookie"] = cookie_str
+            pr = _rq.put(part["uploadUrl"], data=chunk, headers=hdrs, timeout=300)
+            if pr.status_code not in (200, 201, 204):
+                return {"ok": False, "step": f"put-part-{i}", "status": pr.status_code,
+                        "asset_urn": asset_urn, "error": pr.text[:200]}
+            # LinkedIn returns each part's handle in the Location header (signedId), not ETag
+            sid = pr.headers.get("Location") or pr.headers.get("ETag") or pr.headers.get("etag")
+            if sid:
+                etags.append(sid.strip('"'))
+        # 3) finalize the multipart upload (tell LinkedIn all parts are in)
+        fin_url = f"{BASE}/voyagerVideoDashMediaUploadMetadata?action=finalizeUpload"
+        fin_body = {"finalizeUploadMetadata": {
+            "mediaArtifact": val.get("mediaArtifactUrn"),
+            "asset": asset_urn,
+            "uploadedPartsUploadUrns": etags,
+        }}
+        fr = self._vg().post(fin_url, fin_body)
+        return {"ok": True, "asset_urn": asset_urn, "recipes": recipes,
+                "size": fsize, "parts": len(parts), "etags": len(etags),
+                "finalize_status": fr.status_code, "finalize_body": fr.text[:150]}
+
+    def create_post_with_video(self, text: str, video_path: str,
+                               visibility: str = "PUBLIC",
+                               wait_processing: int = 40) -> dict:
+        """Full flow: upload a video, wait for it to process, then publish a post with it.
+        Returns the create_post result plus the asset URN used.
+        """
+        import time as _t
+        up = self.upload_video(video_path)
+        if not up.get("ok"):
+            return {"ok": False, "phase": "upload", **up}
+        asset_urn = up["asset_urn"]
+        recipes = up.get("recipes", [])
+        # give LinkedIn a moment to process the freshly uploaded video before attaching
+        if wait_processing:
+            _t.sleep(wait_processing)
+        vis = "CONNECTIONS_ONLY" if str(visibility).upper().startswith("CONNECT") else "ANYONE"
+        url = f"{BASE}/graphql?action=execute&queryId={SHARES_QID}"
+        post = {
+            "allowedCommentersScope": "ALL",
+            "intendedShareLifeCycleState": "PUBLISHED",
+            "origin": "FEED",
+            "visibilityDataUnion": {"visibilityType": vis},
+            "commentary": {"text": text, "attributesV2": []},
+            "media": {"category": "VIDEO", "mediaUrn": asset_urn, "recipes": recipes},
+        }
+        body = {"variables": {"post": post}, "queryId": SHARES_QID, "includeWebMetadata": True}
+        r = self._vg().post(url, body)
+        errors = []
+        try:
+            errors = (r.json().get("data", {}) or {}).get("errors") or []
+        except Exception:
+            pass
+        ok = r.status_code in (200, 201) and not errors
+        out = {"ok": ok, "status": r.status_code, "visibility": vis,
+               "asset_urn": asset_urn, "phase": "post"}
+        if ok:
+            out["note"] = ("posted with video; confirm live via get_my_posts / browser. "
+                           "Video may still be transcoding for a minute after publish.")
+        elif errors:
+            out["error"] = errors[0].get("message", "GraphQL validation error")
+        else:
+            out["error"] = f"post failed (HTTP {r.status_code}) — {r.text[:150]}"
+        return out
+
+    def upload_image(self, image_path: str) -> dict:
+        """Upload an image (browserless, single-part). VERIFIED live 2026-07-18 (scrybe post).
+        Unlike video, images use mediaUploadType=IMAGE_SHARING and a singleUploadUrl —
+        one PUT, no multipart finalize needed. Returns the digitalmediaAsset URN.
+        """
+        fsize = os.path.getsize(image_path)
+        url = f"{BASE}/voyagerVideoDashMediaUploadMetadata?action=upload"
+        r = self._vg().post(url, {
+            "mediaUploadType": "IMAGE_SHARING",
+            "fileSize": fsize,
+            "filename": os.path.basename(image_path),
+        })
+        if r.status_code not in (200, 201):
+            return {"ok": False, "step": "register", "status": r.status_code,
+                    "error": r.text[:200]}
+        val = (r.json().get("data", {}) or {}).get("value", {}) or {}
+        asset_urn = val.get("urn")
+        single = val.get("singleUploadUrl")
+        if not asset_urn or not single:
+            return {"ok": False, "step": "register", "error": "no asset/singleUploadUrl",
+                    "raw": r.text[:300]}
+        hdrs = dict(val.get("singleUploadHeaders") or {})
+        hdrs.setdefault("Content-Type", "application/octet-stream")
+        with open(image_path, "rb") as fh:
+            pr = requests.put(single, data=fh.read(), headers=hdrs, timeout=120)
+        if pr.status_code not in (200, 201, 204):
+            return {"ok": False, "step": "put", "status": pr.status_code,
+                    "asset_urn": asset_urn, "error": pr.text[:200]}
+        return {"ok": True, "asset_urn": asset_urn, "size": fsize}
+
+    def create_post_with_image(self, text: str, image_path: str,
+                               visibility: str = "PUBLIC") -> dict:
+        """Full flow: upload an image, then publish a post with it. VERIFIED live 2026-07-18
+        (scrybe post, activity 7484249869516365824). Same Shares mutation as create_post,
+        media.category=IMAGE + feedshare-image recipe; no processing wait needed.
+        """
+        up = self.upload_image(image_path)
+        if not up.get("ok"):
+            return {"ok": False, "phase": "upload", **up}
+        asset_urn = up["asset_urn"]
+        vis = "CONNECTIONS_ONLY" if str(visibility).upper().startswith("CONNECT") else "ANYONE"
+        url = f"{BASE}/graphql?action=execute&queryId={SHARES_QID}"
+        post = {
+            "allowedCommentersScope": "ALL",
+            "intendedShareLifeCycleState": "PUBLISHED",
+            "origin": "FEED",
+            "visibilityDataUnion": {"visibilityType": vis},
+            "commentary": {"text": text, "attributesV2": []},
+            "media": {"category": "IMAGE", "mediaUrn": asset_urn,
+                      "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"]},
+        }
+        body = {"variables": {"post": post}, "queryId": SHARES_QID, "includeWebMetadata": True}
+        r = self._vg().post(url, body)
+        errors = []
+        try:
+            errors = (r.json().get("data", {}) or {}).get("errors") or []
+        except Exception:
+            pass
+        ok = r.status_code in (200, 201) and not errors
+        out = {"ok": ok, "status": r.status_code, "visibility": vis,
+               "asset_urn": asset_urn, "phase": "post"}
+        if ok:
+            import re as _re
+            urns = sorted(set(_re.findall(r"urn:li:(?:share|activity):\d+", r.text)))
+            out["urns"] = urns[:4]
+            out["note"] = "posted with image; confirm live via independent read."
+        elif errors:
+            out["error"] = errors[0].get("message", "GraphQL validation error")
+        else:
+            out["error"] = f"post failed (HTTP {r.status_code}) — {r.text[:150]}"
+        return out
+
     def edit_post(self, activity_id: str, share_id: str, text: str) -> dict:
         """Edit an existing post's text. VERIFIED (Shares mutation + resourceKey/updateUrn, docs/24).
         activity_id + share_id identify the post (both from get_my_posts / the post URN).

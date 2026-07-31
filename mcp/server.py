@@ -384,6 +384,19 @@ def create_post(text: str, visibility: str = "PUBLIC", poll_urn: str = "",
 
 @mcp.tool
 @write_tool
+def create_post_with_image(text: str, image_path: str, visibility: str = "PUBLIC",
+                           confirm: bool = False) -> dict:
+    """Publish a post with an image (browserless single-part upload, verified 2026-07-18:
+    asset URN D4E22AQGKhtES62GYIw, post went live).
+    image_path: local path to the image file. People-facing → requires confirm=True."""
+    if not confirm:
+        return {"needs_confirmation": True, "preview": text,
+                "image_path": image_path, "visibility": visibility}
+    li.ensure_session()
+    return li.create_post_with_image(text, image_path, visibility)
+
+
+@write_tool
 def edit_post(activity_id: str, share_id: str, text: str, confirm: bool = False) -> dict:
     """Edit an existing post's text. Needs activity_id + share_id (from the post URN / get_my_posts).
     People-facing → requires confirm=True."""
