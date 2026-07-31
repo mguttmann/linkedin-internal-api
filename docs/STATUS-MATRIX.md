@@ -38,6 +38,26 @@ invasive, and every test artifact was removed afterwards (verified clean).
 | Events | `graphql voyagerEventsDashEventsCardGroupResource` | 🔍 |
 | Premium analytics | `graphql voyagerPremiumDashAnalyticsView` | 🔍 |
 
+> **Session-diagnosis note (2026-07-31).** The `voyager/api/me` row above is also the MCP session
+> probe, and the MCP tool `session_status` now reports *which kind* of failure that probe hit
+> instead of one undifferentiated `logged_in: false`. It gained `session_suspect`, `error_code` and
+> `retryable`; `error_code`'s remediation is returned as `hint`. **`session_suspect` is `True` for
+> exactly one class** — a redirect to the login page, the only session death this repo evidences
+> (`SESSION-AND-ERRORS-DESIGN.md`, section 2.1). A **403 is `csrf_missing`, not a dead session**
+> (same document, section 2.2), an absent cookie file is `session_file_missing` — a setup problem —
+> and a timeout is `transport_unavailable`. So a caller no longer reads "session dead" into every
+> failure. The classification carries no response body: status, endpoint name, body length and the
+> class, nothing else. Offline-proven against a faked transport, **not yet live-tested**; nothing in
+> this table changed status and **nothing new became ✅**. `logged_in` is now the classification
+> itself, so a 200 that the classification rejects — an HTML interstitial, a truncated body — reports
+> `logged_in: false` **with** its `error_code` and `hint`, never a healthy session with no signal; the
+> flip side is that the probe demands a readable JSON body where it previously demanded only HTTP 200,
+> which no live call has exercised. What is held by a test, and the known limits — among them that an
+> empty-bodied success is filed as a non-JSON read — are listed in
+> `SESSION-AND-ERRORS-DESIGN.md`, section 2.7.
+> The cookie inventory that the same document sketches in section 1 was **declined** and is a
+> non-goal, not a backlog item.
+
 ## Write operations
 
 All of the following were captured by driving the **real client** (click-and-record) and

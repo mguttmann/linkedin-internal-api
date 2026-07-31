@@ -1,16 +1,27 @@
 # Session Visibility & Error Taxonomy — Design
 
-> ## ⛔ STATUS: NOT BUILT
+> ## STATUS, split in two (updated 2026-07-31)
 >
-> **Nothing in this document is implemented.** It is a design brief plus the repo evidence that
-> backs it, written so the implementation needs no new research. **Nothing below carries the
-> repo's verified marker, and nothing may:** per `05-VERIFICATION.md:3-6` that marker requires a
-> real executed call with a documented HTTP status, and **nothing here was executed**. No live
-> LinkedIn call was made, no code was changed, no test was added, and no field described below
-> exists in `mcp/server.py` today.
+> **Section 2 — the error taxonomy — is now BUILT in its narrow form.** What exists:
+> `mcp/lib/errors.py` (`classify`, `classify_exception`), the diagnosis behind
+> `ensure_session()` (`probe_session` in `mcp/lib/client.py`), and three new fields on
+> `session_status` (`mcp/server.py`). The invariants are held by tests
+> (`mcp/tests/test_errors.py`, `mcp/tests/test_server.py`) — see **section 2.7** for the exact
+> list of what is held and what is not.
+> Every one of those tests runs against a **faked transport**: no live LinkedIn call was made, so
+> **nothing here became `✅ verified`** and nothing may — per `05-VERIFICATION.md:3-6` that marker
+> needs a real executed call with a documented HTTP status. Read the built part as
+> **offline-proven, not yet live-tested.**
 >
-> What *is* solid: every claim about **this repo's own code and docs** was read at the cited
-> `file:line` against commit `7b662e3`. Claims about LinkedIn's *behaviour* carry a label
+> **Section 1 — the cookie inventory — stays ⛔ NOT BUILT, deliberately.** The owner declined it
+> (see section 1.0): `soonest_expiry_days`, `hosts`, `file_age_h`, the cookie count and the
+> marker inventory are **non-goals**, not backlog. Sections 1.1–1.9 remain a design brief only.
+> Nothing in `lib/cookies_extract.py`, `mcp/lib/session_browser.py` or `mcp/session_daemon.py`
+> was touched, and the four inconsistent marker checks of section 1.5 are still four.
+> Section 4's scope sketch is annotated per item.
+>
+> What *is* solid throughout: every claim about **this repo's own code and docs** was read at the
+> cited `file:line` against commit `7b662e3`. Claims about LinkedIn's *behaviour* carry a label
 > (VERIFIED / CAPTURED / INFERRED / ABSENT, legend below) and several of them are **ABSENT** — that
 > is written down as ABSENT, not smoothed over.
 >
@@ -33,6 +44,19 @@ is used below as a **reference to copy from**. It is **READ-ONLY — never modif
 ---
 
 ## 1. The honest answer to request (1) first: most of it is not derivable today
+
+### 1.0 ⛔ Declined by the owner (2026-07-31) — this whole section is a non-goal
+
+The owner read sections 1.1–1.9 and **dropped request (1) entirely**, accepting the argument that a
+number measuring something other than what its name suggests is worse than no number — explicitly
+including `file_age_h`, which the 300-second rewrite cycle of section 1.4 would have made *actively*
+misleading. Declined, and therefore **not** to be re-proposed as a backlog item:
+cookie age, `file_age_h`, `hosts`, `soonest_expiry_days` and the cookie inventory as a whole.
+
+What was asked for instead is the small thing that already lay in this document: **one field that
+says whether a given error means session death** — `session_suspect`, plus the express note that a
+403 from a missing csrf-token is **not** one. That is section 2, and only section 2 was built
+(section 2.7). Sections 1.1–1.9 stay below unchanged as the record of *why* the answer was no.
 
 The requested shape was Indeed's:
 
@@ -275,8 +299,8 @@ and is the wrong reflex. **unknown** = declare it unknown, do not guess.
 | **L9** | **404** from a rotated `queryId` / `sduiid` hash | **NO** — deploy drift | **INFERRED**: no *observed* rotation-404 is documented. What exists are anticipating code notes (`mcp/lib/client.py:40-41`, `:99-100`, `:106`, `:763-765`) and a 404 from a *wrong path* (`docs/STATUS-MATRIX.md`, section "Important corrections (paths that do NOT work)", the `contentcreation/dash/normShares` row). Clean handling to copy: `get_conversations` catches the non-JSON case, `mcp/lib/client.py:112-117` | INFERRED |
 | **L10** | **429** rate limit | **NO** | **ABSENT as an observation** — the only mention is one cheat-sheet row, `docs/05-VERIFICATION.md:94`. Declare it the way Indeed does: *anticipated, never seen* (`indeed-internal-api/lib/errors.py:194-200`) | ABSENT |
 | **L11** | **`KeyError: 'JSESSIONID'`** before the request | **NO** — setup error → `SessionMarkersMissing` | `lib/vgreq.py:13`; reachable because `lib/cookies_extract.py:40-42` warns and writes the file anyway | VERIFIED (code fact) |
-| **L12** | **`FileNotFoundError`** — cookie file absent (the current machine state) | **NO** — setup, not session | `lib/vgreq.py:12`, `mcp/lib/client.py:408`. Today `mcp/lib/client.py:75-76` swallows it and reports `logged_in: false`, i.e. as a session problem. Indeed separates `SessionMissing` (`indeed-internal-api/lib/cookies.py:77`) from `SessionExpired` | VERIFIED (code fact) |
-| **L13** | **Network / timeout** (25 s, `lib/vgreq.py:41,49,52`) | **NO** | Also collapsed to `False` by `mcp/lib/client.py:75-76`. Indeed: `TransportUnavailable` / `E-NET` (`indeed-internal-api/lib/errors.py:215-221`) | VERIFIED (code fact) |
+| **L12** | **`FileNotFoundError`** — cookie file absent (the current machine state) | **NO** — setup, not session | `lib/vgreq.py:12`, `mcp/lib/client.py:408`. Up to 2026-07-31 `mcp/lib/client.py:75-76` swallowed it and reported `logged_in: false`, i.e. as a session problem; now separated as `session_file_missing` in `probe_session` (section 2.7). Indeed separates `SessionMissing` (`indeed-internal-api/lib/cookies.py:77`) from `SessionExpired` | VERIFIED (code fact) |
+| **L13** | **Network / timeout** (25 s, `lib/vgreq.py:41,49,52`) | **NO** | Was collapsed to `False` by `mcp/lib/client.py:75-76` too; now `transport_unavailable` (section 2.7). Indeed: `TransportUnavailable` / `E-NET` (`indeed-internal-api/lib/errors.py:215-221`) | VERIFIED (code fact) |
 
 ### 2.4 Detection order — and the one step that must **not** be copied from Indeed
 
@@ -335,6 +359,11 @@ and "your wifi dropped".
 collapsing:** distinguish the exception types, return the class plus `session_suspect`, and let only
 L1 set the flag.
 
+> **Built 2026-07-31.** The code block above is history: `probe_session()` in `mcp/lib/client.py`
+> classifies the exception type instead of swallowing it, and `session_status` reports the class.
+> `ensure_session()` still returns a `bool`. What each of the four causes now reads as, and which
+> test holds it, is in section 2.7.
+
 ### 2.6 🔒 Redaction is a security requirement of this design, not polish
 
 **ABSENT in this repo:** `grep -rn "redact\|scrub" mcp/ lib/ tools/` returns **0 hits**. There is no
@@ -356,6 +385,163 @@ line or an error message" — and this extends it to response bodies. **Minimum 
 
 Build the redaction helper **in the same change** as the first error message that could carry a
 body. Retrofitting it later means the untruncated version already reached a transcript.
+
+### 2.7 What was actually built (2026-07-31) — and what holds it
+
+**Scope of the change:** `mcp/lib/errors.py` (new), `mcp/lib/client.py`, `mcp/server.py`,
+`mcp/tests/test_errors.py` (new), `mcp/tests/test_server.py`. Nothing else. No redaction framework
+(see below), no marker refactor, no cookie inventory.
+
+Two session tools changed behaviour, no other tool did. `session_status` gained fields (below), and
+`refresh_session` keeps its exact key set (`logged_in`, `hint`) but its `hint` is now the
+classification's remediation instead of the fixed sentence "cookies still stale" — that sentence was
+the misattribution this ticket exists to remove, and a test holds the new wording for a missing
+cookie file (*setup*) and for a timeout (*retry*). Both tools now call `probe_session()` rather than
+`ensure_session()`; see the last item under "Not held" for the one consequence that carries.
+
+**The module.** `mcp/lib/errors.py` is **pure by contract** — no network, no file access, no
+cookies; it imports nothing but typing names, and a test asserts that it holds no module objects at
+all. `classify(response=…, endpoint=…)` and `classify_exception(exc, endpoint=…)` return one flat
+dict: `code`, `session_suspect`, `retryable`, `remediation`, `evidence`, `status`, `endpoint`,
+`body_len`. Detection order is section 2.4's, with one deliberate refinement: the content-type step
+(2.4 step 3) applies **only to 2xx**. Were it applied to a 4xx as well, a 403 served as `text/html`
+would be filed as "non-JSON" instead of `csrf_missing` and section 2.2 — the entire point — would be
+lost; on a 4xx/5xx the status carries the information.
+
+**The one `session_suspect`.** `session_expired` is the only class whose `session_suspect` is
+`True`, and the module keeps its code in one constant so that the invariant can be tested over the
+whole class table rather than over a handful of examples. It is reached only by a `3xx` whose
+`Location` points at the login page — which arrives as a 3xx at all because the transport passes
+`allow_redirects=False` (section 2.1).
+
+**`session_status` (`mcp/server.py`)** now returns, in addition to `logged_in` and `read_only`:
+`session_suspect`, `error_code`, `retryable` and a `hint` that is the class's `remediation`. The
+docstring states the redaction promise of section 2.6. The case "cookie file absent" — the current
+state of this machine — is now visibly `session_file_missing` with a remediation that says *setup*,
+not *log in again*.
+
+**One rule forms the success statement.** `logged_in` is the classification and nothing else:
+`probe_session()` returns `code == "ok"` (`mcp/lib/client.py`, `probe_session`), and
+`session_status` hangs `error_code` and `hint` on `code != "ok"` (`mcp/server.py`,
+`session_status`). The earlier draft of this change kept a *second* rule — `status == 200` — beside
+the classification, and masked `error_code`/`hint` behind it. That combination reported a failed
+probe as a healthy session with no signal at all whenever the two rules disagreed: a 200 serving a
+login interstitial, or a 200 whose body is truncated. Review rejected it as the "failure that looks
+like a success" class, and it is gone: a classified failure now always surfaces both its class and
+its hint, and a healthy probe carries neither. `session_suspect` was not touched by this — it stays
+`True` for the login redirect alone.
+
+**Section 2.5 is no longer the mechanism it describes.** `probe_session()` in `mcp/lib/client.py`
+replaces the `except Exception: return False`: the exception **type is the diagnosis**, so a missing
+cookie file, a missing cookie marker and a network/timeout error no longer share one `False`.
+`ensure_session()` keeps its `bool` signature — every tool calls it — and now reads
+`probe_session()["logged_in"]`; the diagnosis is available *next to* the bool, not instead of it.
+
+**Held by passing offline tests** (`mcp/tests/test_errors.py`, `mcp/tests/test_server.py`):
+
+- exactly one class in the table carries `session_suspect=True`, and it is `session_expired`;
+- a `Location` on a login path sets the flag (header name read case-insensitively); a redirect
+  elsewhere does not;
+- a **403 is `csrf_missing`, never session death**, and its remediation names `JSESSIONID` —
+  including when the 403 is served as HTML;
+- the Voyager content type `application/vnd.linkedin.normalized+json+2.1` counts as JSON. This is
+  the copy-paste error of 2.4 step 3 nailed down: a test fails the moment the check is narrowed to
+  the bare `application/json` string;
+- a 200 carrying `data.errors` is classified before the status is looked at (L7);
+- 400 / 401 / 404 / 429 / 500 map to their classes and **none** of them sets the flag; 429 is
+  `retryable`;
+- provenance stays honest where the design says the mode was never observed: 401 and 429 carry
+  `evidence = anticipated — never observed in this repo`, the rotation-404 carries `inferred`;
+- an unrecognised status, and an object that does not duck-type as a response at all, come back as
+  `unknown` — never as session death and never as an exception: `ensure_session()` returns a plain
+  `False` for it, because this path sits under every tool;
+- the three pre-request causes are told apart (`session_file_missing`, `session_markers_missing`,
+  `transport_unavailable`, all with `status = "no_request"`), and none of them is session death;
+- **`logged_in` is exactly `code == "ok"`** — a 2xx served as HTML, a 2xx with an empty or truncated
+  body, a 2xx whose body is not a JSON object, and a 2xx carrying `data.errors` or a top-level
+  `errors` all report `logged_in=false`;
+- **`error_code` is set exactly when `hint` is set, and exactly when `logged_in` is false** — held as
+  an invariant over a timeout, a 403, a 204 and a healthy probe, not over one example;
+- a failed probe is never reported as a healthy session, and none of these failures sets
+  `session_suspect`;
+- `refresh_session`'s hint names the classified cause (setup / retry) and keeps the key set
+  `{logged_in, hint}`;
+- the two classes with no L1–L13 row, `non_json_response` and `redirect_unexpected`, carry
+  `evidence = inferred`, and `non_json_response`'s remediation acquits nothing — a test fails if
+  either is relabelled as observed;
+- **no body leaves the classification**: the result carries exactly the eight keys above, a planted
+  profile URN / name / message text appears nowhere in the rendered result, and only `body_len`
+  reports the body — held for `classify()` and again at the tool boundary for `session_status`;
+- `ensure_session()` still returns a plain `bool`.
+
+**Not held, and honestly so:**
+
+- **Nothing is live-tested.** Every test fakes the transport; no LinkedIn response was seen. The
+  classes inherit their labels from section 2.3 and gain no new evidence from this change.
+- An **empty-bodied success** (a 204 delete, a body-less 201) currently classifies as
+  `non_json_response`. That is pinned as a known limitation with its reason: `classify()` is wired
+  only into the `/me` probe, which answers with a JSON body. Whoever reuses the module on a write
+  path decides that case *there*. What holds in both readings: an empty-bodied success is never
+  session death.
+- The success statement is now **stricter** than the earlier draft's: `code == "ok"` demands a
+  readable JSON object body, where `status == 200` demanded only the status line. Offline that is the
+  correct reading of the classification and it is test-held; what is *not* proven is that no live
+  Voyager `/me` answer trips it — unprovable here, because this repo has no live session (see
+  "Nothing is live-tested" above). What that risk can reach is **narrower than it looks**, and
+  narrower than an earlier version of this section claimed: **no caller reads `ensure_session()`'s
+  return value.** Every tool body in `mcp/server.py` calls it as a bare statement and discards the
+  `bool`; the `write_tool` decorator (`mcp/server.py`, `write_tool`) consults only
+  `read_only_enabled()` and never the session; `mcp/README.md` describes it the same way, as a GET
+  the tool emits. A stricter `bool` therefore cannot block a tool. It changes only what
+  `session_status`, `refresh_session` and `probe_session` **report** — that is the owner decision,
+  and it is theirs, not an agent's.
+- **Pre-existing, untouched, and surfaced by the line above:** the session gate protects nothing.
+  Because the `bool` is discarded everywhere, a tool proceeds with its real call whatever the probe
+  says, and a dead session is discovered by that call failing rather than by the gate. That predates
+  this change, is not made better or worse by it, and is its own ticket.
+- Two classes in the module — `non_json_response` and `redirect_unexpected` — have **no row** in the
+  L1–L13 table; they are complements the implementation needed. Both therefore carry
+  `evidence = inferred` in the code, and a test holds that label, so the code's label and this
+  document now agree. The earlier draft labelled `non_json_response` `verified` and had its
+  remediation state "this is not a session problem"; review rejected both, and the class now acquits
+  nothing.
+- `redirect_unexpected` is also the class for a 3xx whose `Location` is not readable at all. It
+  proves nothing in either direction, and its remediation says so.
+- The one signal that may set `session_suspect` is matched as a **substring** of the whole `Location`
+  value (`mcp/lib/errors.py`, `classify`), not as a URL path. That is the wording section 2.4 step 2
+  uses, and the only wired route is the `/me` probe, but a `Location` that merely *contains*
+  `/login` — a company page called `login-inc`, a `?next=/login` query — would read as session death,
+  and a differently cased `/UAS/Login` would not. Raised in review, not fixed here; no test covers
+  the false-positive direction.
+- `session_status` and `refresh_session` call `probe_session()`, which does **not** repeat
+  `ensure_session()`'s check that the transport module imported (`mcp/lib/client.py`,
+  `ensure_session`). With `vgreq` unimportable those two tools therefore report `unknown` with
+  "capture the request and classify it", where they previously raised `RuntimeError("vgreq not
+  importable — check repo layout")`. Failing quietly at the tool boundary is right, but this is a
+  fourth nameable *setup* cause left in the default bucket — in the ticket whose purpose is telling
+  setup causes apart. Not fixed here, and no test holds either reading.
+- `classify_exception` buckets by exception type only: any `OSError` reads as
+  `transport_unavailable`, so a cookie file that exists but cannot be read (`PermissionError`, a
+  directory in its place) reports as a transport problem — and reports it as `retryable` with
+  `evidence = verified`, which is the strongest label on the widest bucket. A half-written cookie
+  file (a JSON decode error) lands in `unknown`. Both were raised in review and are **not** fixed
+  here; the exception *type* is a weaker witness than these labels suggest.
+- **No redaction helper was built** (section 2.6 asked for one alongside the first message that
+  could carry a body). Instead the rule is kept by construction — the classification emits status,
+  endpoint, body length and its own class, nothing else. The leak tests hold that for the **response**
+  path, at `classify()` and again at the `session_status` boundary. On the **exception** path the rule
+  is held by construction only: `classify_exception` never reads `str(exc)`, but no test asserts it,
+  and that path is the one carrying the cookie file path. A redaction helper is still needed the
+  moment any excerpt is genuinely wanted.
+- The new taxonomy is **not yet the only voice** on one signal. For a 2xx without a readable JSON
+  body it says "decides nothing about the session either way", while the untouched `_read_json`
+  (`mcp/lib/client.py`, `_read_json`) still returns "the session is most likely stale … check
+  session_status()" on the read path — the very reflex this ticket removes, reachable through the
+  read tools. Rewiring the read path was out of scope; until it happens, the two messages disagree
+  and `session_status` is the one to believe.
+- `docs/BACKLOG.md` still lists the "failure that looks like a success" residue for the session probe
+  as open. That file is outside this ticket's scope and was deliberately not edited, so its entry for
+  this specific residue is stale as of this change; this section is the current reading.
 
 ---
 
@@ -403,20 +589,27 @@ actionable remediation is the same either way: re-capture the full body and repl
 
 ---
 
-## 4. What a first implementation would look like (scope sketch, nothing built)
+## 4. What a first implementation would look like (scope sketch, one item of six built)
 
-Deliberately small, and honest about what it cannot know:
+Deliberately small, and honest about what it cannot know. Status per item as of 2026-07-31:
 
 1. **One cookie store** — read both payload shapes, write one; one path resolver (§1.7, §1.8).
+   ⛔ **not built — declined** (§1.0).
 2. **`SESSION_MARKERS`** in one place, `markers_missing` derived from it (§1.5).
+   ⛔ **not built — declined** (§1.0); the four checks are still four.
 3. **`session_status`** gains `cookies: {count, markers_missing, cookie_file_age_h,
    soonest_expiry_days: null, hosts: null, unavailable: {...}}` plus `owner_urn_set: bool`
-   (§1.3, §1.5).
+   (§1.3, §1.5). ⛔ **not built — declined** (§1.0). What `session_status` did gain instead is
+   `session_suspect`, `error_code` and `retryable` (§2.7).
 4. **`classify()`** implementing §2.4, returning at least `{class, session_suspect, remediation,
-   status, endpoint}` — and **no body** (§2.6).
-5. **Redaction helper**, shipped with step 4, never after.
+   status, endpoint}` — and **no body** (§2.6). **BUILT — offline-proven, not yet live-tested**
+   (§2.7) — as `code` rather than `class`, plus `retryable`, `evidence` and `body_len`.
+5. **Redaction helper**, shipped with step 4, never after. ⛔ **not built.** No message in the new
+   path can carry a body; tests hold that for the response path, the exception path only by
+   construction. The helper is owed to the first excerpt anyone wants (§2.7, "No redaction helper
+   was built").
 6. **Only then**, as a separate change, the expiry source (§1.6) — including the offline assert that
-   patchright really delivers `expires`.
+   patchright really delivers `expires`. ⛔ **not built — declined** (§1.0).
 
 **Constraints, not suggestions.** Everything above is offline-testable: no network, no cookie file,
 no browser. The established pattern is a faked `vgreq` module injected into `sys.modules`
@@ -424,19 +617,28 @@ no browser. The established pattern is a faked `vgreq` module injected into `sys
 "no network" by making the network impossible in the test, not by trusting the code path.
 
 **What the passing suite covers today, for the record — including one real constraint on §1.5:**
-two tests touch `session_status`. `mcp/tests/test_server.py:16-23` pins it in the exact expected
-tool set, so the tool may not be renamed or dropped. `mcp/tests/test_readonly.py:38` lists it in
+`mcp/tests/test_server.py` pins `session_status` in the exact expected tool set, so the tool may not
+be renamed or dropped, and since 2026-07-31 also holds its new fields and their invariants (§2.7).
+`mcp/tests/test_readonly.py:38` lists it in
 `READ_CALLS`, which means the parametrised `test_read_tools_are_not_blocked_under_read_only`
 (`mcp/tests/test_readonly.py:165-173`) already holds behaviour: the return value must be a `dict`
 (`:169`), it must use no mutating verb (`:172`), and — the binding one — it **must reach the
 transport with a GET** (`:173`, "listed as a READ but never reached the transport"). Today that GET
-is the `/me` probe of `li.ensure_session()` (`mcp/server.py:197`). **Consequence for §1.5: an
+is the `/me` probe, since 2026-07-31 issued by `li.probe_session()` (§2.7) instead of
+`li.ensure_session()`, on the same transport and with the same GET. **Consequence for §1.5: an
 implementation that answers `session_status` purely from the cookie file, or returns early before
 the `/me` probe, breaks `mcp/tests/test_readonly.py:173`.** The cookie inventory has to be added
 *alongside* the probe, not instead of it — or that test has to be changed as a deliberate, argued
-decision. Beyond that: `mcp/tests/test_readonly.py:176-180` asserts only the `read_only` key, and
-**no test holds any `logged_in` semantics, any cookie-inventory field, or any error class** —
-because none of that exists. Every field in this document is unheld until its test is written.
+decision. Beyond that: `mcp/tests/test_readonly.py:176-180` asserts only the `read_only` key.
+
+**Updated 2026-07-31.** `session_status`'s new fields (`session_suspect`, `error_code`,
+`retryable`) and the error classes now *are* held, by `mcp/tests/test_server.py` and
+`mcp/tests/test_errors.py` — the list is in §2.7, and it is the only list worth trusting.
+`logged_in`'s semantics are part of that list: it is the classification (`code == "ok"`), no longer
+"the probe answered 200", and the invariant *`error_code` set ⇔ `hint` set ⇔ `logged_in` false* is
+held too. Still unbuilt: every cookie-inventory field of §1 — declined, so no test will hold them.
+The items §2.7 lists under "Not held" are unheld by name. Every other field in this document remains
+unheld until its test is written.
 
 **The one call that would prove any of it: none is needed for §1 or §2.** All of it is derivable
 from the local cookie file and from response metadata. The **only** proving live call in this area

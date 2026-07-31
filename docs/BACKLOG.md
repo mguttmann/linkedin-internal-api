@@ -425,14 +425,18 @@ pre-existing classes that this change widened from twelve tools to nineteen, non
    the error direction is the safe one (a reader expects less protection than exists), and the
    durable fix is the class wording `COVERAGE-MAP.md` uses, not a longer list.
 
-## ⏳ Session age / cookie inventory in `session_status` — designed, NOT built
+## ❌ Session age / cookie inventory in `session_status` — WITHDRAWN by the owner
 
-**Status:** fully specified against the current tree, no code written (2026-07-31).
-**Design + evidence:** [`SESSION-AND-ERRORS-DESIGN.md`](SESSION-AND-ERRORS-DESIGN.md) §1.
+**Status:** closed 2026-07-31 — **not** wanted, do not re-propose. The owner asked for the cookie
+inventory, read the evidence below, and withdrew the request in his own words: *"Eine Zahl, die
+etwas anderes misst als sie suggeriert, ist schlimmer als keine Zahl."* He asked for
+`session_suspect` instead, which is built (next entry).
+**Design + evidence, kept for the reasoning:**
+[`SESSION-AND-ERRORS-DESIGN.md`](SESSION-AND-ERRORS-DESIGN.md) §1 and §1.0.
 
-`session_status` returns only `logged_in`, `read_only` and `hint` (`mcp/server.py:197-201`). Wanted: a
-cookie inventory in the shape the Indeed MCP reports (`count`, `hosts`, `file_age_h`,
-`soonest_expiry_days`, `markers_missing`).
+The original request was a cookie inventory in the shape the Indeed MCP reports (`count`, `hosts`,
+`file_age_h`, `soonest_expiry_days`, `markers_missing`). It is recorded here as **declined**, not as
+a to-do, because two of those five fields cannot be honest today and one is actively misleading:
 
 **The design partially refuses the request, on evidence — read §1 before implementing:**
 `soonest_expiry_days` and `hosts` have **no data source** in this repo, because both cookie
@@ -443,22 +447,34 @@ producers keep only `{name: value}` and discard `expires` and `domain`
 `/tmp/li_cookies.json` is **not** session age — `mcp/session_daemon.py:43` rewrites the file on a
 cycle — so the field has to be called `cookie_file_age_h`.
 
-**Buildable today:** `count`, `markers_missing` (`li_at` + `JSESSIONID`), `cookie_file_age_h`, and
-whether `LI_OWNER_URN` is set (unset silently blocks **every** `delete_comment`, including the
-owner's own — `mcp/lib/client.py:38`, guard `:326`, `:328-334`).
+**Would have been buildable honestly** (recorded only so a future reader need not re-derive it, not
+as a plan): `count`, `markers_missing` (`li_at` + `JSESSIONID`), `cookie_file_age_h`, and whether
+`LI_OWNER_URN` is set — the last is worth knowing independently, because unset silently blocks
+**every** `delete_comment`, including the owner's own (`mcp/lib/client.py:38`, guard `:326`,
+`:328-334`).
 **Two prerequisites before any file-derived field:** unify the two cookie-path notions
 (`VG_COOKIES` vs. the unused `self.cookies_path`, §1.8) and make every reader accept **both**
 payload shapes — `lib/vgreq.py:11-15` reads the flat dict and breaks on a list (§1.7).
 
-## ⏳ Error taxonomy with `session_suspect` — designed, NOT built
+## ✅ Error taxonomy with `session_suspect` — BUILT 2026-07-31 (offline-proven, not live-tested)
 
-**Status:** fully specified against the current tree, no code written (2026-07-31).
+**Status:** built. `mcp/lib/errors.py` classifies a response (or a pre-request exception) into a
+short `code` plus `session_suspect`, `retryable`, `remediation` and an `evidence` label, and
+`session_status` reports `session_suspect`. Exactly **one** class carries `session_suspect=True`.
+Nothing here is ✅-verified against LinkedIn: no session existed, so it is proven against fixtures
+only, **not yet live-tested**.
 **Design + evidence:** [`SESSION-AND-ERRORS-DESIGN.md`](SESSION-AND-ERRORS-DESIGN.md) §2, table L1–L13.
 
-Today `mcp/lib/client.py:72-76` collapses "no cookie file", "network/timeout", "missing marker" and
-a genuine auth failure into one `except Exception: return False`, which surfaces as
-`logged_in: false` — i.e. **as a session problem** in all four cases (`mcp/server.py:197-201`). That
-is the mechanism behind "every 403 means the session is dead".
+**What it replaced:** a single `except Exception: return False` collapsed "no cookie file",
+"network/timeout", "missing marker" and a genuine auth failure into `logged_in: false` — i.e. into
+**a session problem** in all four cases. That was the mechanism behind "every 403 means the session
+is dead", and it is gone: one rule forms `logged_in` (`code == "ok"`), and the three non-session
+causes now classify as themselves.
+
+**Still open here:** the classifier exists, but it is not yet wired into every tool's failure path —
+today it backs the session probe and `session_status`. Routing the other tools' errors through it is
+a separate change. Redaction is still absent repo-wide (`grep redact\|scrub` → 0); this module keeps
+bodies out of its results by rule and by test, which is not the same as the repo having redaction.
 
 **The headline finding:** of every evidenced failure mode, **exactly one** is real session death —
 the **302 → `/uas/login`** (`05-VERIFICATION.md:91`, arriving as a 302 because

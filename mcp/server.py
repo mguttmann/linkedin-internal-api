@@ -226,12 +226,32 @@ def session_status() -> dict:
     """Check whether the LinkedIn session is live (a /me probe). Pure API, no browser.
 
     read_only mirrors LINKEDIN_READ_ONLY: when true, every writing tool is blocked (it raises) —
-    check this instead of probing the mode with a write."""
-    ok = li.ensure_session()
-    return {"logged_in": ok,
+    check this instead of probing the mode with a write.
+
+    session_suspect answers the one question worth asking: does THIS failure mean re-login?
+    It is True only for the single evidenced case, a redirect to the login page. A missing
+    cookie file (error_code=session_file_missing) is a SETUP problem, and a 403
+    (error_code=csrf_missing) is a header problem — neither is a dead session, so neither sets
+    the flag. Follow `hint`, not the status code.
+
+    logged_in is the classification itself (`ok`), not a second rule about the status code: a
+    2xx that carries no readable JSON body is a failed probe, so it reports logged_in=false WITH
+    an error_code — never a healthy session with no signal. Whenever error_code is set, hint is
+    set too.
+
+    Never prints cookie values, and never a response body or an excerpt of one — only the
+    status, the endpoint name, the body length and the classification."""
+    diag = li.probe_session()
+    # error_code/hint hang on the CLASSIFICATION, not on logged_in. Masking them behind
+    # logged_in would discard the classification exactly when it contradicts the success
+    # statement — a failed probe would surface as a healthy session with no signal at all.
+    failed = diag["code"] != "ok"
+    return {"logged_in": diag["logged_in"],
             "read_only": read_only_enabled(),
-            "hint": None if ok else ("session cookies are stale — the external session_daemon.py "
-                                     "refreshes /tmp/li_cookies.json; (re)start it to log in")}
+            "session_suspect": diag["session_suspect"],
+            "error_code": diag["code"] if failed else None,
+            "retryable": diag["retryable"],
+            "hint": diag["remediation"] if failed else None}
 
 
 @mcp.tool
@@ -239,10 +259,14 @@ def refresh_session() -> dict:
     """Re-check the session against the current cookie file (does NOT launch a browser).
 
     Login/refresh is handled OUTSIDE the MCP by session_daemon.py, which keeps the cookie file
-    fresh. This tool just re-probes /me; if it's still logged_in=false, (re)start the daemon."""
-    ok = li.ensure_session()
-    return {"logged_in": ok,
-            "hint": None if ok else "cookies still stale — (re)start session_daemon.py to log in"}
+    fresh. This tool just re-probes /me; if it's still logged_in=false, follow `hint` — it names
+    the classified cause instead of blaming the cookies for every failure. Same keys as before;
+    call session_status() for the full classification including session_suspect."""
+    diag = li.probe_session()
+    # The hint is the CLASSIFICATION, not a fixed sentence: "cookies still stale" for a timeout
+    # or a missing cookie file is the same misattribution session_status() exists to stop.
+    return {"logged_in": diag["logged_in"],
+            "hint": None if diag["code"] == "ok" else diag["remediation"]}
 
 
 # ── Engagement writes (verified endpoints, live-captured bodies) ─────────

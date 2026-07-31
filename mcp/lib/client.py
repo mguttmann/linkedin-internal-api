@@ -21,7 +21,7 @@ from typing import Optional
 
 import requests
 
-from . import jobs_parse
+from . import errors, jobs_parse
 
 # Reuse the proven pure-requests client from the internal-api repo (sibling ../lib).
 _REPO_LIB = os.path.join(os.path.dirname(__file__), "..", "..", "lib")
@@ -71,11 +71,37 @@ class LinkedInClient:
             raise RuntimeError("vgreq not importable — check repo layout")
         return self._session_ok()
 
-    def _session_ok(self) -> bool:
+    _SESSION_PROBE_ENDPOINT = "voyager.me.get"
+
+    def probe_session(self) -> dict:
+        """Probe /me and CLASSIFY the outcome instead of collapsing it into one False.
+
+        The diagnosis behind ensure_session(): a missing cookie file (FileNotFoundError from
+        lib/vgreq.py _load), a missing cookie marker (KeyError from the same place) and a
+        network/timeout error used to end up on the same `False`, which session_status then
+        reported as "session stale, go log in again" for all of them
+        (docs/SESSION-AND-ERRORS-DESIGN.md, section 2.5).
+
+        Returns errors.classify()'s flat dict plus `logged_in`. Only the login redirect carries
+        session_suspect=True; it contains NO response body (section 2.6). Not yet live-tested.
+
+        ONE rule forms the success statement: `logged_in` is exactly `code == "ok"`. A second
+        rule (the earlier `status == 200`) could OVERRULE the classification and report a probe
+        that failed — a 200 serving a login interstitial, a truncated body — as a healthy
+        session: the "failure that looks like a success" class. `ok` is only reached by a 2xx
+        with a readable JSON object body and no error carrier (mcp/lib/errors.py classify).
+        """
+        endpoint = self._SESSION_PROBE_ENDPOINT
         try:
-            return self._vg().get(f"{BASE}/me").status_code == 200
-        except Exception:
-            return False
+            r = self._vg().get(f"{BASE}/me")
+        except Exception as exc:  # noqa: BLE001 — the type IS the diagnosis, see classify_exception
+            diag = errors.classify(exc=exc, endpoint=endpoint)
+        else:
+            diag = errors.classify(response=r, endpoint=endpoint)
+        return {"logged_in": diag["code"] == "ok", **diag}
+
+    def _session_ok(self) -> bool:
+        return self.probe_session()["logged_in"]
 
     @staticmethod
     def _vg():
