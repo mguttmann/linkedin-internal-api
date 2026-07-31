@@ -5,11 +5,26 @@ recommendation feed for the owner. Browserless (pure `requests` through `vgreq`)
 gate — reads never get one — and registered on the READ side of the read-only split
 (`mcp/tests/test_readonly.py`).
 
-**Status of this document: the routes are 🔍 discovered, the parsing is offline-proven against
-synthetic fixtures, and NOTHING here is live-tested — both tools are "not yet live-tested".** There is no session in the session that
-built it, so no ✅ is claimed anywhere below. The offline suite is green; what that green covers is
-listed under "What is proven, and how", and what it does not cover is listed under "Open, not
-accepted". Do not read this file as a release note: the routes are still unexecuted by this repo.
+**Status of this document (updated 2026-07-30 by the owner's live run against commit `5a251da` —
+provenance and its scope: `STATUS-MATRIX.md`, legend entry "(owner-run)").** The picture is no longer
+uniform, so read the three lines separately:
+
+- **`get_job` is ✅ live-verified**, on two paths: **HTTP 200** for a real job id with the flat
+  projection holding up on real data, and **HTTP 404** for an invented one with an honest error that
+  keeps the requested `job_id`. That is the 404 path only — the id-**mismatch** abort was *not*
+  exercised and stays fixture-proven.
+- **`get_job_recommendations` is ✅ only for its honesty**: on a live 200 without a findable container
+  it reported `state: "unknown"`, not `empty`. The **endpoint** is a different matter — it answered but
+  yielded no usable jobs, so it is **not verified usable** and stays open pending a capture of the raw
+  body.
+- **Everything else below is still offline evidence**: the identity table, the state table beyond
+  `unknown`, the container-selection rules, the description cut with its `description_truncated` flag
+  and every `company`-join case — the reference join and the sole-company fallback alike — are proven
+  against **synthetic fixtures** only.
+
+The offline suite is green; what that green covers is listed under "What is proven, and how", what the
+live run added is in its own subsection there, and what neither covers is under "Open, not accepted".
+Do not read this file as a release note.
 
 ---
 
@@ -22,10 +37,11 @@ GET /voyager/api/jobs/jobPostings/<jobId>
     ?decorationId=com.linkedin.voyager.deco.jobs.web.shared.WebFullJobPosting-65
 ```
 
-Evidence: the owner's own live measurement (2026-07-30, HTTP 200). That makes the **route and its
-field set** 🔍 — captured from real traffic, not executed by this repo. The decoration id and the
+Evidence: **executed live by the owner on 2026-07-30, HTTP 200** — through this very tool, not merely
+captured from traffic. That makes the route **✅ verified** for the read path. The decoration id and the
 path live in `mcp/lib/client.py` (`LinkedInClient._JOB_POSTING_DECO`, used in
-`LinkedInClient.get_job`).
+`LinkedInClient.get_job`). A non-existent id on the same route answered **HTTP 404** and produced the
+tool's honest error branch.
 
 Three different resources exist for job postings and they are easy to confuse. This tool uses the
 **first** one:
@@ -53,6 +69,18 @@ GET /voyager/api/graphql?includeWebMetadata=true&variables=(paginationToken:<url
 Both variants are in the endpoint catalogue (`data/endpoints_voyager.json`, section
 `voyagerJobsDashJobsFeed`) with a captured response of ~110 KB. The hashes are held as
 `LinkedInClient._JOBS_FEED_QID` and `_JOBS_FEED_PAGE_QID`.
+
+**Live status (owner's run, 2026-07-30): this route answered HTTP 200 — and delivered nothing this
+repo could read.** The tool reported `state: "unknown"` (see §4, "What the live run added"). So the
+route is executed but **not verified usable**, and the next step is a capture of the **raw** body, not
+a parser change.
+
+**Not this route, and not to be confused with it:** the owner separately probed a REST-like form,
+`voyagerJobsDashJobsFeed?decorationId=com.linkedin.voyager.dash.deco.jobs.JobsFeed-2&count=5&q=jobsFeed&start=0`,
+and measured **HTTP 400** with a 14-byte body. Useful to know about *that* form; it says nothing about
+the GraphQL route above, which the tool exclusively uses (`mcp/lib/client.py`,
+`get_job_recommendations` — the URL is built from `_JOBS_FEED_QID` / `_JOBS_FEED_PAGE_QID` and no
+`decorationId`/`q=jobsFeed` variant is ever sent) and which answered 200 in the same run.
 
 **Re-capture path:** `queryId` and `decorationId` hashes rotate with LinkedIn deployments. When a
 call answers 4xx, re-grab the request with `tools/crawl_recursive.py` and update the two constants
@@ -208,6 +236,53 @@ depth, not a pick from the entity pool (see the next section).
 
 ## 4. What is proven, and how
 
+### 4.0 What the live run added (owner-run, 2026-07-30 against `5a251da`)
+
+This is the **only** live evidence in this document. It covers three things and not a millimetre more.
+
+**(a) `get_job` end to end — HTTP 200.** The legacy Rest.li route answered 200 and the projection held
+on a real body. What the values prove, quoted only where the value carries the proof (a public advert
+of a real employer; no further detail, no personal data):
+
+- `company` came back **filled** (`Dräger`) — the employer name was resolved out of `included[]` on a
+  real body. **Which of the two branches produced it is not decidable from this run:** the reference
+  join, or the sole-company fallback that applies when the entity references nothing resolvable and
+  the pool holds exactly one company (`jobs_parse._company_name`). The returned value carries no
+  marker of its branch, and the owner reported only the name. So the *reference path* against a real
+  body stays **unproven**; both branches remain fixture-proven only.
+- `description_text` was **Attributed Text, cleanly extracted, with no `str()`/repr artefact**. Its
+  length equalled the character budget of that run. That alone does **not** show the cut applied: a
+  text exactly as long as the budget comes back whole with `description_truncated=False`
+  (`jobs_parse.job_fields`). The owner reported `description_truncated` as *present*, without its
+  value, so **truncation itself is not live-evidenced** — it stays fixture-proven.
+- `employment_status` and `location` were filled with plain strings — no stringified enum object.
+- `remote_allowed: false`, `applies: 0`, `views: 0` were **read**, not left `null`; `salary: null`
+  arrived next to the separate `salary_present` key, which is exactly the two-way split §2 describes.
+- the `reposted` key was **present** in the answer — the reposting warning signal the owner wanted.
+- `listed_at` came back as a 13-digit integer, consistent with epoch milliseconds. The **unit remains
+  inferred**: a plausible magnitude is not documentation.
+- `endpoint` (`voyager.jobs.jobPostings.get`) travels in the answer, so a caller can record which route
+  verified a job.
+
+**(b) The 404 path of `get_job` — HTTP 404.** An invented id produced `ok: false` with an honest error,
+and the **requested** `job_id` stood unchanged in the answer: no silent failure, no empty success, no
+id overwritten by the response. **This is the 404 path, not the id-mismatch path.** A body carrying a
+*different* id than the requested one cannot be provoked without a prepared response, so the hard
+mismatch abort remains proven by fixture only — the owner states that limit himself.
+
+**(c) The honesty of `get_job_recommendations` — and only that.** The GraphQL feed route answered
+**HTTP 200**, but no collection container was findable under `data`, and the tool reported
+`state: "unknown"`, `count: 0`, `read_entries: 0`, `paging_total: null`, `ok: false` with the
+re-capture note. It did **not** report `empty`. That is the direct counter-proof to the false success
+which caused the first hand-back: the earlier version would have answered
+`ok=True, count=0, "a genuinely empty page"` on this very body. **What this does not prove:** that the
+endpoint is usable. It answered and delivered no readable jobs, and the **raw body was not kept** —
+without it, "the response shape drifted (another container key)", "the feed was empty or not entitled"
+and "an in-band error arrived with a 200" are all still open. The tool is verified honest; the endpoint
+is not verified usable (`BACKLOG.md`).
+
+### 4.1 Proven offline
+
 **Proven offline, by passing tests** — `mcp/tests/test_jobs_parse.py` (pure parsers) and
 `mcp/tests/test_client.py` (route, URL, argument pass-through against a fake transport):
 
@@ -262,24 +337,30 @@ depth, not a pick from the entity pool (see the next section).
 
 **Not proven, and it matters:**
 
-- **No live call was made.** Not one of the two routes was executed by this repo. Everything above
-  is "the request we would send" and "how we parse a body of that shape".
+- **Live evidence covers exactly the three items in §4.0 and nothing else.** Every other statement in
+  this document is "the request we would send" and "how we parse a body of that shape". In particular:
+  the **id-mismatch abort**, the `ambiguous` / `drift` / `absent` states, every container-selection rule
+  and every negative `company`-join case were **not** exercised live.
 - **The fixtures under `mcp/tests/fixtures/` are synthetic and PII-free.** They prove the parser
   logic only — they are **not** evidence of LinkedIn's response form. Where a real body differs,
   the honest failure states (`unknown`, `drift`, `absent`) are what the tools will produce, and
   the fix is a re-capture, not a parser guess.
-- `listed_at`'s unit, the `salaryInsights` shape and the exact container path of the 110 KB feed
-  body are **unconfirmed**.
+- `listed_at`'s unit and the `salaryInsights` shape are **unconfirmed** (the live 200 showed a 13-digit
+  integer and a `null` salary — neither documents a unit or a shape). The **container path of the feed
+  body is more open than before, not less**: the live 200 offered no findable container at all, so
+  nothing about where the real container sits was learned.
 - The **employer name for a single posting** is joined on the company URN the posting entity itself
   references (`jobs_parse._company_name`, `_referenced_company_names`), and the fixture exercises
   that join through a nested `companyDetails.company` reference. Two different referenced employers
   (a staffing agency plus the hiring company) leave the field `null` rather than naming a plausible
   one. The pool is accepted as the witness only for a **single posting** body **and only when it
   holds exactly one company** — Manuel's capture note says *where* the name sits, not that there is
-  ever only one entry, so anything beyond that would be an unbound claim. What is **not** proven:
-  that a real body's employer reference sits where the synthetic fixture puts it. If it sits
-  somewhere the join does not reach, `company` comes back `null` — which is the honest outcome, not
-  a wrong employer.
+  ever only one entry, so anything beyond that would be an unbound claim. **What the live run adds
+  here is less than it looks:** `company` came back filled on one real body (§4.0 (a)), so *some*
+  branch resolved a name out of `included[]` — but the answer carries no marker of which one, so the
+  **reference path itself remains unproven against a real body**, exactly as before. Both branches and
+  every negative case (unreachable reference, two conflicting employers) stay fixture-only. `null` is
+  the honest outcome there, never a plausible-looking wrong employer.
 
 ---
 
@@ -289,6 +370,12 @@ There is **no** `search_jobs` tool. The keyword/filter search is a separate rout
 filter grammar, and no capture of it exists in this repo. Building it would mean inventing filter
 keys, which is the one thing this repo's history says never to do ("don't guess — click and
 record"). It waits for a capture of a real job search from the client, and only then a tool.
+
+**Update 2026-07-30 — a capture exists, but not here.** The owner reports having produced one. It lives
+on **his** host and is **not present in this clone** (searched for, not found). A capture that the repo
+does not have is not evidence the repo may build on: the route, the query string and every filter key
+stay unknown here, and the status of this section is unchanged. The next step is therefore not code —
+it is getting the capture file into the repo (`BACKLOG.md`).
 
 ---
 
@@ -372,23 +459,38 @@ covers only what the candidate *search* did not reach (item 1) or picked by shap
 `unknown`, `ambiguous` and `drift` mean exactly what the table says. `hits` names cards that really
 stood in the body, each with a link built from its own id — the open question there is whether the
 container they stood in is the feed. `company` on `get_job` is evidence-joined (see the previous
-section), but the reference *path* is unproven against a real body. The live call in the next section
-settles items 1 and 3 for the real body by showing where the container actually sits.
+section); the live run showed the field filled on one real body, but not which branch filled it, so
+the reference *path* is still unproven against a real body (§4.0 (a)).
+
+**Items 1 and 3 were expected to be settled by a live feed call. They were not.** The owner's live run
+did execute the feed route, but the 200 it returned offered **no findable container at all** (§4.0 (c)),
+so neither the depth of the real container path nor the presence of a second, filled rail next to it was
+observed. Both items stay open exactly as written, and what they now additionally wait on is the **raw
+body** of that 200 — which is the same artifact the endpoint itself waits on.
 
 ---
 
-## 7. The one live call that would prove the routes
+## 7. The live call — executed, and what it left open
 
-No live call was made and none may be made without an owner decision. The proving call:
+**This section is no longer a proposal for `get_job`.** The owner ran both tools on 2026-07-30 against
+`5a251da`; the results are in §4.0, the provenance rule in `STATUS-MATRIX.md`. Outcome in one line:
+`get_job` is verified on the 200 and the 404 path, the feed route answered 200 but read as
+`state: "unknown"`, so the recommendations **endpoint** and open items 1 and 3 are **not** settled.
 
-- **What:** `get_job(<a job id the owner is looking at>)` and `get_job_recommendations(3)` against
-  the live session, recording both HTTP statuses and the resulting `identity` / `state`.
-- **What it proves:** that the legacy REST route and the feed `queryId` are still current, that
-  the employer name really sits where the capture says and is reachable by the join, and that the
-  container path of the feed body is the one `read_job_collection` selects — which is what settles
-  open items 1 and 3 above for the real body: how deep the container sits, and whether a second,
-  filled rail sits next to it.
-- **Risk:** both are GETs on the owner's own account — nothing is created, changed or deleted.
-  The residual risk is the usual one of any authenticated read (rate limiting / session wear) and
-  the fact that a rotated hash answers 4xx, which the tools report honestly.
-- **Cost:** two requests.
+What is still needed, and it is no longer a plain live call:
+
+- **What:** re-run `get_job_recommendations(3)` and **keep the raw response body** of the 200 (the tool
+  deliberately never returns bodies, so this has to come from a capture — `tools/crawl_recursive.py`)
+  or capture the jobs feed request from the real client again.
+- **What it would prove:** which container key the real body carries (or that it carries none, or that a
+  200 arrived with an in-band error, or that the feed is empty / not entitled) — the one fact that
+  decides whether the endpoint is usable and that settles open items 1 and 3 for a real body.
+- **Risk:** a GET on the owner's own account — nothing is created, changed or deleted. Residual risk is
+  the usual one of any authenticated read (rate limiting / session wear), plus the handling rule that a
+  captured body must be treated as private data and must never be committed.
+- **Cost:** one request.
+
+**Not part of this and still unexecuted: the SDUI header question** (minimal headers vs. vgreq's Voyager
+headers). It is a **write**, so it needs the owner's explicit go; the one-variable call is written out in
+`COVERAGE-MAP.md` ("The one-variable test that would settle it") and stands ready — only the approval is
+missing.

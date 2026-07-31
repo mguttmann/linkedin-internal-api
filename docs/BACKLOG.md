@@ -240,7 +240,10 @@ change and therefore out of scope by rule. Each has file + symptom + basis.
    500". That is not verified and is contradicted for `comments.createComment` by `:242` (SDUI route
    + vgreq headers, documented live 200). See "SDUI header causality" in `COVERAGE-MAP.md` for the
    one-variable test. **Do not delete the docstring line before that test has run** — mark it, then
-   settle it.
+   settle it. **Status 2026-07-30: still unexecuted, and not for technical reasons.** The owner's live
+   run of that date covered the jobs reads only; this test is a **write**, and his operating rule
+   requires his explicit go for a write. The call stands ready as written — only the approval is
+   missing, so the docstring claim stays flagged and unsettled.
 4. **`tools/build_docs.py` truncates `url_sample` AND `postData` at 200 characters**
    (`tools/build_docs.py:102`, `:105`). Because of that the complete query strings of the jobs
    search route and the `SearchFilterClusters` route are lost from the catalog.
@@ -471,6 +474,10 @@ only, **not yet live-tested**.
 is dead", and it is gone: one rule forms `logged_in` (`code == "ok"`), and the three non-session
 causes now classify as themselves.
 
+**Not live-evidenced (2026-07-30):** in operation `session_suspect` has **never fired**. The owner's
+live run of that date produced no session failure, so the class that carries `session_suspect=True`
+remains proven against fixtures only. Do not upgrade it on the strength of that run.
+
 **Still open here:** the classifier exists, but it is not yet wired into every tool's failure path —
 today it backs the session probe and `session_status`. Routing the other tools' errors through it is
 a separate change. Redaction is still absent repo-wide (`grep redact\|scrub` → 0); this module keeps
@@ -497,6 +504,58 @@ Not to be re-admitted as facts: the vgreq-header cause of the SDUI 500 (unverifi
 `COVERAGE-MAP.md`, section "Current state (live)", bullet "Unproven factor — the headers") and the
 `currentActor` cause (a red herring per
 `mcp/lib/client.py:433-434`); carry the latter as one causeless class "SDUI replay incomplete".
+
+## 🔍 Jobs recommendations endpoint — live 200, nothing readable; the raw body is the missing artifact
+
+**Status 2026-07-30 (owner-run — provenance and scope: `STATUS-MATRIX.md`, legend entry "(owner-run)"):**
+the tool is fine, the endpoint is not. Separate the two layers, they are not the same finding:
+
+- **The tool is ✅ verified honest.** On a live **HTTP 200** whose body held no collection container
+  under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `read_entries: 0`,
+  `paging_total: null`, `ok: false` with the re-capture note — and **not** `empty`. The false success
+  that caused the first hand-back (`ok=True, count=0, "a genuinely empty page"`) is structurally dead,
+  demonstrated on a real body. Nothing to do here.
+- **The endpoint is NOT verified usable** and stays open: it answered and delivered no readable jobs.
+
+**The one missing artifact: the raw response body of that 200.** Three explanations are open and the
+body decides between them — (a) the response shape drifted and the container sits under a different key,
+(b) the feed was genuinely empty or the account is not entitled to it, (c) an in-band error arrived with
+a 200. Until then, do **not** touch the parser: every fix would be a guess about a body nobody has read,
+which is the exact failure mode this repo's history warns about.
+
+**Next step (a read, low risk):** re-run `get_job_recommendations(3)` while capturing the request/response
+with `tools/crawl_recursive.py`, or capture the jobs feed request from the real client again. The tool
+itself deliberately never returns bodies, so the capture cannot come from the tool's output.
+**Handling:** a captured feed body is private data — never commit it (`.gitignore` already excludes
+`_captures*/`), and strip it before any of it reaches a doc.
+
+**Also settled by that same body: open items 1 and 3 in `27-JOBS.md` §6** (the candidate search's
+depth/width limit, and the container being picked by shape rather than by evidence that it is the feed).
+The live run was expected to settle them and did **not** — a body without any findable container reveals
+neither how deep the real container sits nor whether a second, filled rail sits beside it.
+
+**Not part of this entry, do not merge it in:** the owner also measured **HTTP 400** (14-byte body) for a
+different, REST-like form,
+`voyagerJobsDashJobsFeed?decorationId=com.linkedin.voyager.dash.deco.jobs.JobsFeed-2&count=5&q=jobsFeed&start=0`.
+That is a finding about **that form**. The tool never sends it — it builds the captured GraphQL URL from
+`_JOBS_FEED_QID` / `_JOBS_FEED_PAGE_QID` (`mcp/lib/client.py`, `get_job_recommendations`) — and the
+owner's own 200 proves the tool's route is not the 400 one: a 400 from the tool would have produced the
+`HTTP {status} for the jobs feed` branch with the queryId-rotation hint, not the container note.
+
+## ❌ `search_jobs` (P1b) — the capture exists on the owner's host, not in this repo
+
+**Status 2026-07-30:** not built, and still not buildable **here**. The owner reports he produced a
+capture of a real job search. It lives on **his** host; it is **not present in this clone** (searched
+for, not found). A capture the repo does not have is not evidence the repo may build on — the route, the
+complete query string and every filter key remain unknown here, so building the tool would still mean
+inventing filter keys ("don't guess — click and record"). Scope note in `27-JOBS.md` §5.
+
+**Next step is not code:** get the capture file into the repo (or an excerpt of it that is free of
+cookies and personal data), then derive the route and the filter grammar from it. Two known traps before
+anyone reads a catalogued value instead: `data/endpoints_voyager.json` holds the jobs search route with
+`url_sample` truncated at 200 characters by `tools/build_docs.py` — that truncation is tracked above
+and means the catalogued query string is **incomplete**, not the grammar; and the raw captures behind the
+catalog are not in this repo either.
 
 ## Notes
 - The MCP is a pure API client: no browser, no clicking (refactor 01980e5). Session login/

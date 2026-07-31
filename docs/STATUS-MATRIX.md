@@ -13,6 +13,11 @@ invasive, and every test artifact was removed afterwards (verified clean).
 - **[O] open item** — the MCP tool is known **not to work today** and the cause or the missing
   artifact is open. Not a status of the endpoint: it says "do not rely on this tool". Every `[O]`
   has an entry in `BACKLOG.md` with the ranked candidates and the exact next capture.
+- **(owner-run)** — provenance marker, stated here **once** and only referred to elsewhere: the call
+  was executed by the repo owner in his own live session on **2026-07-30 against commit `5a251da`**
+  and reported with its HTTP status. The sessions that wrote the code had no session of their own, so
+  wherever this marker stands, the measurement is the owner's — and it covers **exactly** the paths he
+  ran, never a neighbouring one. A ✅ without it is an earlier live run of this repo.
 
 ## Read operations (GET)
 
@@ -32,8 +37,8 @@ invasive, and every test artifact was removed afterwards (verified clean).
 | Notifications | `voyagerIdentityDashNotificationCards?q=filterVanityName` | ✅ 200 |
 | Any profile by vanityName | `identity/dash/profiles?q=memberIdentity` | ✅ 200 |
 | Search | `graphql voyagerSearchDashClusters` | 🔍 |
-| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 — MCP `get_job_recommendations`, flat cards with a `state` that tells "no jobs" from "could not read"; a container nested under an empty one IS found (pinned by test); offline-proven against synthetic fixtures, **not yet live-tested**; remaining open items (the candidate search has a depth/width limit, and the container is picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
-| Job posting (detail) | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li, **not** the dash resource, **not** GraphQL) | 🔍 owner's own live measurement 2026-07-30 — MCP `get_job`: identity-checked against the requested id at exact identifying keys and order-invariantly, a divergence is a hard abort with **no** `url`; parsing offline-proven, **not yet live-tested** — `27-JOBS.md` |
+| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 endpoint — **not** verified usable. The **tool's honesty behaviour is ✅ (owner-run)**: on a live HTTP 200 whose body held no collection container under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `ok: false` with the re-capture note — **not** `empty`. The endpoint itself answered but yielded no readable jobs, so it stays open and needs a capture of the **raw** body (`BACKLOG.md`). Parsing offline-proven against synthetic fixtures; remaining open items (the candidate search has a depth/width limit, and the container is picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
+| Job posting (detail) | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li, **not** the dash resource, **not** GraphQL) | ✅ 200 (owner-run) — MCP `get_job`, flat projection confirmed against real data; **plus** ✅ 404 (owner-run) for a non-existent id: honest error, requested `job_id` unchanged. That is the **404 path only** — the id-**mismatch** abort remains fixture-proven and was explicitly *not* exercised. Details and the field-level evidence in the live-run note below and `27-JOBS.md` |
 | Company page | `graphql voyagerOrganizationDashCompanies` | 🔍 |
 | Events | `graphql voyagerEventsDashEventsCardGroupResource` | 🔍 |
 | Premium analytics | `graphql voyagerPremiumDashAnalyticsView` | 🔍 |
@@ -47,8 +52,9 @@ invasive, and every test artifact was removed afterwards (verified clean).
 > (same document, section 2.2), an absent cookie file is `session_file_missing` — a setup problem —
 > and a timeout is `transport_unavailable`. So a caller no longer reads "session dead" into every
 > failure. The classification carries no response body: status, endpoint name, body length and the
-> class, nothing else. Offline-proven against a faked transport, **not yet live-tested**; nothing in
-> this table changed status and **nothing new became ✅**. `logged_in` is now the classification
+> class, nothing else. Offline-proven against a faked transport, **not yet live-tested**; no row of
+> this table changed status **through that change**, and it made nothing ✅ (the two jobs rows became
+> ✅/partly ✅ later, through the owner's live run — see the jobs note below). `logged_in` is now the classification
 > itself, so a 200 that the classification rejects — an HTML interstitial, a truncated body — reports
 > `logged_in: false` **with** its `error_code` and `hint`, never a healthy session with no signal; the
 > flip side is that the probe demands a readable JSON body where it previously demanded only HTTP 200,
@@ -57,6 +63,58 @@ invasive, and every test artifact was removed afterwards (verified clean).
 > `SESSION-AND-ERRORS-DESIGN.md`, section 2.7.
 > The cookie inventory that the same document sketches in section 1 was **declined** and is a
 > non-goal, not a backlog item.
+> **Still not live-evidenced (as of the owner's report of 2026-07-30):** `session_suspect` exists and
+> is offline-proven, but it has **never fired in operation** — no live failure has classified through
+> it yet.
+
+> **Jobs live-run note — the first ✅ in this repo that came from the owner's session (owner-run,
+> see the legend).** Two paths of `get_job` were executed and one behaviour of
+> `get_job_recommendations` was observed. What follows is the whole of it; nothing beyond it changed
+> status.
+>
+> **1. `get_job`, real id → HTTP 200.** The legacy Rest.li route with
+> `decorationId=…WebFullJobPosting-65` answered 200 and the flat projection held up on real data.
+> Field-level evidence, kept to what carries the proof (a public job advert of a real employer; no
+> further detail and no personal data is recorded here): `company` came back **filled** (`Dräger`), so a
+> name was resolved out of `included[]` on a real body — but **not** which branch resolved it (the
+> reference join or the sole-company fallback), so the reference path stays fixture-proven only.
+> `description_text` was Attributed Text extracted **cleanly, with no `str()` artefact**; its length
+> equalled the run's budget, which does **not** show a cut (an exactly budget-long text comes back
+> whole), and the flag's value was not reported — truncation stays fixture-proven.
+> `employment_status` and `location` were filled and
+> not stringified objects. `remote_allowed: false`, `applies: 0`, `views: 0` were **read** rather than
+> left `null`, and `salary: null` alongside the separate `salary_present` key. The `reposted` key was
+> **present** — the reposting warning signal the owner asked for. `listed_at` came back as a 13-digit
+> integer; that is consistent with epoch milliseconds but the unit is still **inferred**, not
+> documented. `endpoint` (`voyager.jobs.jobPostings.get`) rides in the response so a caller can log
+> which route verified a job.
+>
+> **2. `get_job`, invented id → HTTP 404.** The tool returned an honest error with `ok: false`, and
+> the **requested** `job_id` stood unchanged in the answer — no silent failure, no empty success, no
+> overwritten id. **This is the 404 path, not the id-mismatch path.** A body carrying a *different* id
+> than the one requested cannot be provoked without a prepared response, so the hard mismatch abort
+> stays **fixture-proven only**; the owner names that limit himself.
+>
+> **3. `get_job_recommendations` — the false success is structurally dead (✅ for the tool, not for the
+> endpoint).** The route the tool actually sends is the captured **GraphQL** one —
+> `graphql?includeWebMetadata=true&variables=(count:<n>,start:0)&queryId=voyagerJobsDashJobsFeed.<hash>`
+> (`mcp/lib/client.py`, `get_job_recommendations`, with `_JOBS_FEED_QID` / `_JOBS_FEED_PAGE_QID`). It
+> answered **HTTP 200**, but no collection container was findable under `data`, so the tool reported
+> `state: "unknown"`, `count: 0`, `read_entries: 0`, `paging_total: null`, `ok: false` plus the
+> re-capture note — and explicitly **not** `empty`. The previous version would have claimed
+> `ok=True, count=0, "a genuinely empty page"` here; that is the false success which caused the first
+> hand-back, and it is now provably gone. **What is missing is the raw response body:** without it,
+> nobody can decide whether the response shape drifted (a different container key), whether the feed
+> was empty or not entitled, or whether an in-band error arrived with a 200. So the **endpoint stays
+> open** (`BACKLOG.md`), while the tool's honesty is verified.
+>
+> **Separately — a different, REST-like form measured 400.** The owner also tried
+> `voyagerJobsDashJobsFeed?decorationId=com.linkedin.voyager.dash.deco.jobs.JobsFeed-2&count=5&q=jobsFeed&start=0`
+> and got **HTTP 400** (14-byte body). That is a useful finding **about that form** and is recorded as
+> such. It is **not** a statement about the route the tool uses: the tool never sends it, and the
+> owner's own 200 above proves it did not — a 400 from the tool would have produced the
+> `HTTP {status} for the jobs feed` branch with the queryId-rotation hint, not the container note. Do
+> not merge the two.
 
 ## Write operations
 

@@ -20,8 +20,11 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
 **MCP tools:**
 - *Reads (browserless):* `get_me`, `get_my_posts`, `get_profile`, `get_notifications`,
   `get_conversations`, `get_connections_summary`, `get_post_comments`, `get_link_preview`,
-  `get_job`, `get_job_recommendations` (both ungated reads, offline-proven only — **not yet
-  live-tested**, remaining open items in `27-JOBS.md` §6)
+  `get_job`, `get_job_recommendations` (both ungated reads. `get_job` is **live-verified** by the
+  owner's run of 2026-07-30 against `5a251da` — 200 on a real id, 404 on an invented one; the
+  recommendations **endpoint** is not verified usable, only the tool's honest `unknown` on a
+  container-less 200 is. Provenance and scope: `STATUS-MATRIX.md`, legend entry "(owner-run)" and the
+  jobs live-run note; remaining open items in `27-JOBS.md` §6)
 - *Posts:* `create_post` (+poll_urn), `edit_post`, `delete_post`, `create_poll`, `save_post`,
   `repost`, `delete_repost` (repost create browserless 200; repost delete captured via browser
   only — the `delete_repost` tool is **not operational** and now **refuses up front, without ever
@@ -78,6 +81,11 @@ more than the evidence carries):
   (like/unlike only), own account only. Until then the header contribution is **unknown**, and
   `03-SDUI-API.md:51-64` (ten "required" SDUI headers) vs. the three that `_sdui_min_headers()`
   sends (`mcp/lib/client.py:411-412`) also stays unresolved.
+- **Status of that test as of 2026-07-30: still not executed, and the reason is not technical.** The
+  owner's live run settled the jobs reads (see `STATUS-MATRIX.md`, jobs live-run note) but deliberately
+  left this one alone: it is a **write**, and his operating rule requires the owner's explicit go for a
+  write. The call stands ready as described above — only the approval is missing. The header question
+  therefore remains **open**, unchanged.
 
 ---
 
@@ -208,10 +216,10 @@ more than the evidence carries):
 ## 9. Jobs
 | Function | Endpoint | Status |
 |---|---|---|
-| Read job recommendations/cards | `graphql voyagerJobsDashJobsFeed` (count + cursor variant) | 🔍 MCP `get_job_recommendations` — flat cards; `state` tells "no jobs" from "could not read", ambiguous container candidates and partial loss have their own state/`reason`, and `read_entries`/`discarded` balance `count` against the raw container; a candidate nested under an empty container IS found (pinned by test); offline-proven against synthetic fixtures, **not yet live-tested**; remaining open items (the candidate search has a depth/width limit, and the container is picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
-| Read job posting detail | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li) | 🔍 (owner's live measurement 2026-07-30) MCP `get_job` — flat projection, identity-checked at exact identifying keys and independently of key order: a divergent (or self-contradictory) job id in the body is a hard abort with **no** `url`, never a correction; `company` is joined on the reference the body itself carries, `null` when ambiguous — the reference *path* is unproven against a real body — `27-JOBS.md` |
+| Read job recommendations/cards | `graphql voyagerJobsDashJobsFeed` (count + cursor variant) | 🔍 endpoint, **not verified usable** — it answered HTTP 200 in the owner's live run but no readable jobs came out of it; it stays open until the **raw** body is captured (`BACKLOG.md`). **✅ for the tool's honesty only (owner-run):** on that container-less 200 `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `ok: false` with the re-capture note, **not** `empty` — the false success that caused the first hand-back is dead. Otherwise unchanged: flat cards; ambiguous candidates and partial loss have their own state/`reason`; `read_entries`/`discarded` balance `count` against the raw container; a candidate nested under an empty container IS found (pinned by test); parsing offline-proven against synthetic fixtures; remaining open items (candidate-search depth/width limit, container picked by shape rather than by evidence that it is the feed) in `27-JOBS.md` §6 |
+| Read job posting detail | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li) | ✅ 200 (owner-run 2026-07-30) MCP `get_job` — the flat projection held on real data: `company` resolved out of `included[]` and came back filled, Attributed Text extracted with no `str()` artefact, `reposted` present, read counters read rather than `null`. **✅ 404 (owner-run)** for an invented id: honest error with the **requested** `job_id` unchanged — that is the 404 path, **not** the id-mismatch path, which stays fixture-proven. Still offline evidence only: identity checking at exact identifying keys and independently of key order (a divergent or self-contradictory body id is a hard abort with **no** `url`, never a correction), the `company` join being `null` when ambiguous, and the description cut plus its `description_truncated` flag. The **reference *path*** for `company` also stays unproven against a real body: the filled value does not say whether the reference join or the sole-company fallback produced it — `27-JOBS.md` |
 | Read job posting detail (dash / detail sections) | `voyagerJobsDashJobPostingDetailSections` | 🔍 catalogued, not used by any tool |
-| **Search** jobs (keyword + filters) | ? | ❌ no capture of the search route or its filter grammar — deliberately **not** built (`27-JOBS.md` §5) |
+| **Search** jobs (keyword + filters) | ? | ❌ **not built.** The route and its filter grammar have no capture **in this repo**. Update 2026-07-30: the owner reports he produced a capture, but it lives on **his** host and is **not present in this clone** (searched for, not found) — so it is not evidence here and nothing may be derived from it. Until the file is in the repo, building it would mean inventing filter keys (`27-JOBS.md` §5, `BACKLOG.md`) |
 | **Save / unsave** a job | ? | ❌ |
 | **Apply** to a job (Easy Apply) | `voyagerJobsDashOnsiteApplyApplication` seen | ❌ write |
 | Set job **alerts / preferences** | `voyagerJobsDashJobSeekerPreferences` | 🔍 read verified; **write not buildable on current evidence** — open items [O-1]…[O-4] in `22-OPEN-TO-WORK.md` (the only documented write path switches the recruiter signal ON; `minimumPay` is ABSENT repo-wide) |
