@@ -18,7 +18,9 @@ Run:  .venv/bin/python -m pytest mcp/tests/test_readonly.py -q
 """
 import asyncio
 import os
+import re
 import sys
+import tempfile
 import types
 
 import pytest
@@ -29,6 +31,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import server  # noqa: E402
 
 _URN = "urn:li:activity:1111111111111111111"
+
+# A synthetic PNG (signature + filler), written to a temp dir at import: NO real photo, no
+# fixture binary in the repo, no network. server.create_post_with_image classifies the file by
+# its own first bytes, so the write-path test below needs a file that actually passes that check.
+_PNG_HEAD = b"\x89PNG\r\n\x1a\n"
+_TEST_IMAGE = os.path.join(tempfile.mkdtemp(prefix="li-mcp-image-"), "cat.png")
+with open(_TEST_IMAGE, "wb") as _fh:
+    _fh.write(_PNG_HEAD + b"\x00" * 40)
 
 # The 12 reading tools — ALL allowed under read-only (server.py get_me … refresh_session).
 # The two jobs reads are READS: they must stay on this side of the split, ungated, and each one
@@ -50,7 +60,7 @@ READ_CALLS = {
     "refresh_session": lambda: server.refresh_session(),
 }
 
-# The 19 writing tools — ALL blocked under read-only. Every one of them now carries a confirm
+# The 20 writing tools — ALL blocked under read-only. Every one of them now carries a confirm
 # gate, so confirm=True is passed for EVERY entry: without it these tests would stop at the
 # confirm gate and prove nothing about read-only (the proof would be silently worthless).
 # test_every_write_tool_is_called_with_confirm_true holds that property mechanically.
@@ -70,6 +80,11 @@ WRITE_KWARGS = {
     "repost": {"activity_id": "999", "confirm": True},
     "delete_repost": {"repost_urn": "urn:li:activity:2", "confirm": True},
     "create_post": {"text": "hello", "confirm": True},
+    # an EXISTING file that also PASSES the image guardrail (see _TEST_IMAGE): with a missing
+    # file — or with any non-image, e.g. this .py file — the tool answers honestly without any
+    # HTTP call, and test_without_the_flag_writes_reach_the_transport would prove nothing about
+    # the read-only gate. The bytes never leave the recorder.
+    "create_post_with_image": {"text": "hello", "image_path": _TEST_IMAGE, "confirm": True},
     "edit_post": {"activity_id": "222", "share_id": "333", "text": "new text", "confirm": True},
     "create_poll": {"question": "Q?", "options": ["A", "B"], "confirm": True},
     "delete_post": {"activity_id": "222", "tracking_id": "trk", "confirm": True},
@@ -95,12 +110,19 @@ class _Resp:
         return {}
 
 
+# Every HTTP verb the recorder below intercepts. A verb the client uses but the fixture does
+# NOT patch escapes into a real outgoing request — test_the_transport_fixture_catches_every_verb
+# holds this list against mcp/lib/client.py mechanically, so the next new verb fails loudly.
+_PATCHED_VERBS = ("get", "post", "put", "patch", "delete", "head", "request")
+
+
 @pytest.fixture
 def transport(monkeypatch):
     """Replace EVERY outgoing path with a recorder and return the call log.
 
     Covers both transports the client uses: the vgreq module (mcp/lib/client.py:79-82) and the
-    raw requests.post used for SDUI writes (mcp/lib/client.py:22, e.g. :342 area / unlike).
+    raw requests.* calls — requests.post for SDUI writes (mcp/lib/client.py:22, e.g. :342 area /
+    unlike) and requests.put for the single-part image upload (upload_image).
     """
     import lib.client as cl
     calls = {"get": [], "post": [], "delete": [], "requests": []}
@@ -108,11 +130,13 @@ def transport(monkeypatch):
     fake.get = lambda url, *a, **k: (calls["get"].append(url) or _Resp())
     fake.post = lambda url, body=None, *a, **k: (calls["post"].append((url, body)) or _Resp())
     fake.delete = lambda url, *a, **k: (calls["delete"].append(url) or _Resp())
+    fake.put = lambda url, body=None, *a, **k: (calls["requests"].append(url) or _Resp())
     monkeypatch.setattr(cl, "vgreq", fake)
     monkeypatch.setattr(cl, "_HAVE_VGREQ", True)
-    for verb in ("get", "post", "delete", "request"):
+    for verb in _PATCHED_VERBS:
         monkeypatch.setattr(cl.requests, verb,
-                            lambda url, *a, **k: (calls["requests"].append(url) or _Resp()))
+                            lambda url, *a, **k: (calls["requests"].append(url) or _Resp()),
+                            raising=False)
     # patch the class of the LIVE client instance: other tests reload lib.client, which rebinds
     # cl.LinkedInClient to a NEW class object while server.li still holds the original one.
     for klass in {cl.LinkedInClient, type(server.li)}:
@@ -121,13 +145,30 @@ def transport(monkeypatch):
     return calls
 
 
+def test_the_transport_fixture_catches_every_verb_the_client_uses():
+    """Class guard, not an instance fix: the recorder must intercept EVERY HTTP verb
+    mcp/lib/client.py can reach for. The measured instance was requests.put in upload_image —
+    unpatched, it performed a REAL outgoing HTTPS request (DNS resolution attempt) instead of
+    being recorded. Any future verb (patch/head/…) fails HERE instead of leaving the sandbox.
+    """
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib", "client.py")
+    with open(src, encoding="utf-8") as fh:
+        used = set(re.findall(r"(?:requests|_vg\(\))\.([a-z]+)\(", fh.read()))
+    assert used, "the verb scan found nothing — the regex no longer matches the client"
+    escaping = sorted(v for v in used if v not in _PATCHED_VERBS)
+    assert not escaping, (
+        f"mcp/lib/client.py calls requests/_vg().{escaping} — the transport fixture does not "
+        f"patch these verbs, so any test exercising that path leaves the sandbox for real")
+
+
 def _sent(calls) -> list:
     return calls["get"] + calls["post"] + calls["delete"] + calls["requests"]
 
 
 def _mutating(calls) -> list:
     """Only the verbs that change something at LinkedIn. A GET is NOT proof of a write: every
-    write tool first calls li.ensure_session() → a GET on /me (mcp/lib/client.py:74)."""
+    write tool first calls li.ensure_session() → a GET on /me (mcp/lib/client.py:74).
+    calls["requests"] carries every raw requests.* call (SDUI POST, image PUT) — all mutating."""
     return calls["post"] + calls["delete"] + calls["requests"]
 
 
@@ -360,6 +401,16 @@ NEW_CONFIRM_GATES = {
     "react_to_message": ("react_to_message", {"message_urn": "urn:li:msg_message:(x,2)"},
                          {"message_urn": "urn:li:msg_message:(x,2)", "emoji": "👏",
                           "toggle": True}),
+    # create_post_with_image arrived WITH its gate; it is listed here for the same machinery —
+    # and because the whitelist assertion below is what holds the payload to the file NAME plus
+    # the MEASURED type and size: image_path is a local path, and a needs_confirmation payload
+    # ends up in the transcript. This path does not exist, hence kind=unknown / size 0 — the
+    # gate must SAY so instead of inviting a confirmation for a file it could not look at.
+    "create_post_with_image": ("create_post_with_image",
+                               {"text": "hello", "image_path": "/Users/someone/pics/cat.png"},
+                               {"preview": "hello", "image_name": "cat.png",
+                                "image_kind": "unknown", "image_bytes": 0,
+                                "image_status": "unreadable_file", "visibility": "PUBLIC"}),
 }
 
 
@@ -396,15 +447,161 @@ def test_new_confirm_gates_hold_at_the_mcp_boundary(case, monkeypatch, transport
     assert _sent(transport) == [], f"{case} must issue ZERO outgoing calls without confirm"
 
 
-def test_new_confirm_gates_never_leak_cookies_or_paths(monkeypatch, transport):
-    # The confirmation payload names the identifying ARGUMENTS only — no cookie values, no
-    # file paths, no server internals (docs/MCP-DESIGN.md §5 / project rule 5).
+# ── leak guard: the CLASS "filesystem path", not a list of known paths ───
+# A tool response lands in the MCP transcript. '/tmp/li_cookies.json' was the known instance;
+# the class is "any absolute filesystem path" — '/Users/<name>/…' leaks the user name and the
+# directory layout just as badly and passed a '/tmp/' blacklist untouched.
+_HOME = os.path.expanduser("~")
+_POISON_PATH = os.path.join(_HOME, "Pictures", "family-photo-2026.png")
+_FORBIDDEN_SUBSTRINGS = ("li_at", "JSESSIONID", "csrf", "Cookie", "ajax:")
+
+# Whitespace tokenisation missed every punctuated or embedded path — measured: "'/private/var/f/
+# li.json'", "(/etc/li/cookies.json)", "path=/var/folders/ab/cd/cat.png", "file:///tmp/li/cat.png"
+# and "~/Pictures/cat.png" all passed it. A regex over the whole string catches the class.
+# Network URLs are not filesystem paths and are removed first; file:// deliberately is one.
+_NETWORK_URL = re.compile(r"\b(?!file\b)[a-z][a-z0-9+.\-]*://\S+", re.I)
+_PATH_LIKE = re.compile(r"""(?<![A-Za-z0-9])~?(?:/+[^/\s'"()\[\],;]+){2,}""")
+
+
+def _looks_like_a_filesystem_path(text: str) -> bool:
+    """True for an absolute (or ~-rooted) path with more than one segment, anywhere inside the
+    string and regardless of surrounding quotes/brackets/`key=`, or for anything under $HOME."""
+    if len(_HOME) > 1 and _HOME in text:
+        return True
+    return _PATH_LIKE.search(_NETWORK_URL.sub(" ", text)) is not None
+
+
+def _walk_strings(value, where="return"):
+    """Every string inside a nested return value, with the key path that carries it."""
+    if isinstance(value, dict):
+        for key, sub in value.items():
+            yield from _walk_strings(sub, f"{where}[{key!r}]")
+    elif isinstance(value, (list, tuple, set)):
+        for i, sub in enumerate(value):
+            yield from _walk_strings(sub, f"{where}[{i}]")
+    elif isinstance(value, str):
+        yield where, value
+
+
+def _kwargs_without_confirm(name):
+    """WRITE_KWARGS minus confirm, with every *path* argument replaced by a $HOME path.
+    Returns (kwargs, poisoned) — poisoned says whether this tool takes a path at all."""
+    kwargs = {k: v for k, v in WRITE_KWARGS[name].items() if k != "confirm"}
+    poisoned = False
+    for key in kwargs:
+        if "path" in key:
+            kwargs[key], poisoned = _POISON_PATH, True
+    return kwargs, poisoned
+
+
+@pytest.mark.parametrize("name", sorted(WRITE_KWARGS))
+def test_no_gated_tool_leaks_a_cookie_or_a_filesystem_path(name, monkeypatch, transport):
+    """EVERY gated tool, checked RECURSIVELY: the confirmation payload names the identifying
+    arguments only — no cookie values, no absolute paths, no server internals
+    (docs/MCP-DESIGN.md §5 / project rule 5). Class guard: a future write tool that echoes a
+    path argument back fails here without anyone adding it to a list.
+    """
     monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
-    for case in sorted(NEW_CONFIRM_GATES):
-        tool, kwargs, _ = NEW_CONFIRM_GATES[case]
-        blob = repr(getattr(server, tool)(**kwargs))
-        for forbidden in ("li_at", "JSESSIONID", "csrf", "Cookie", "/tmp/", "ajax:"):
-            assert forbidden not in blob, f"{case}: {forbidden!r} must not appear in the payload"
+    kwargs, _ = _kwargs_without_confirm(name)
+    out = getattr(server, name)(**kwargs)
+    assert out.get("needs_confirmation") is True, f"{name}: this must be the gate's own answer"
+    for where, text in _walk_strings(out):
+        for forbidden in _FORBIDDEN_SUBSTRINGS:
+            assert forbidden not in text, f"{name}: {forbidden!r} must not appear in {where}"
+        assert not _looks_like_a_filesystem_path(text), \
+            f"{name}: {where} leaks a filesystem path ({text!r})"
+    assert _sent(transport) == [], f"{name} must issue ZERO outgoing calls without confirm"
+
+
+def test_the_path_leak_probe_is_not_vacuous():
+    """A leak probe that can never fire proves nothing: pin the predicate and prove that at
+    least one gated tool actually receives the poisoned path."""
+    assert _looks_like_a_filesystem_path(_POISON_PATH)
+    assert _looks_like_a_filesystem_path("/tmp/li_cookies.json"), "the old instance must stay caught"
+    assert _looks_like_a_filesystem_path("cookies live in /Users/someone/li_cookies.json")
+    # the punctuated / embedded / ~-rooted variants a whitespace split silently let through
+    for leak in ("'/private/var/f/li.json'", "(/etc/li/cookies.json)",
+                 "path=/var/folders/ab/cd/cat.png", "file:///private/tmp/li/cat.png",
+                 "~/Pictures/cat.png", "[/opt/li/state/cookies.json]",
+                 'image="/srv/data/cat.png"'):
+        assert _looks_like_a_filesystem_path(leak), f"{leak!r} is a path leak and must be caught"
+    # and the class must not swallow legitimate payload values: no false positives
+    for clean in ("urn:li:activity:1111111111111111111", "cat.png", "CONNECTIONS_ONLY",
+                  "urn:li:msg_conversation:(urn:li:fsd_profile:ME,1)",
+                  "urn:li:digitalmediaRecipe:feedshare-image",
+                  "https://www.linkedin.com/feed/update/urn:li:activity:1", "and/or", "50/50",
+                  "voyagerVideoDashMediaUploadMetadata?action=upload", "👏"):
+        assert not _looks_like_a_filesystem_path(clean), f"{clean!r} is not a path — false positive"
+    probed = sorted(n for n in WRITE_KWARGS if _kwargs_without_confirm(n)[1])
+    assert probed, "no gated tool takes a path argument — the probe above proves nothing"
+
+
+# ── the image guardrail: what we refuse to send, COUNTED in calls ────────
+# create_post_with_image is the only tool that turns a caller-named LOCAL FILE into a public
+# post. "Readable" is not "valid": the tool classifies the file by its own first bytes and by
+# its size BEFORE anything leaves the process (mcp/server.py create_post_with_image,
+# mcp/lib/client.py inspect_image). Every test here asserts on the recorded call log, so a
+# refusal that still sends something fails. Offline-proven only — never live-tested.
+def _refuse(monkeypatch, path):
+    monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
+    return server.create_post_with_image("hello", path, confirm=True)
+
+
+def test_the_confirmation_describes_the_image_by_type_and_size_not_by_path(monkeypatch,
+                                                                          transport):
+    """The gate has to be DECIDABLE: name, measured type and byte count — the three facts a
+    human needs to tell a holiday photo from a private key, none of which needs a directory."""
+    monkeypatch.delenv("LINKEDIN_READ_ONLY", raising=False)
+    out = server.create_post_with_image("hello", _TEST_IMAGE)
+    assert out["needs_confirmation"] is True
+    assert (out["image_name"], out["image_kind"], out["image_bytes"]) == ("cat.png", "png", 48)
+    assert out["image_status"] == "ok"
+    assert os.path.dirname(_TEST_IMAGE) not in repr(out), "no directory in the payload"
+    assert _sent(transport) == [], "describing the file must cost ZERO calls"
+
+
+@pytest.mark.parametrize("payload,status", [
+    (b"", "empty_file"),                        # would register fileSize=0 and PUT nothing
+    (b"-----BEGIN OPENSSH PRIVATE KEY-----\n", "unsupported_type"),
+    (b"[core]\n\trepositoryformatversion = 0\n", "unsupported_type"),
+])
+def test_a_non_image_file_is_refused_without_a_single_outgoing_call(payload, status, tmp_path,
+                                                                   monkeypatch, transport):
+    # The extension LIES on purpose: the check reads the file's bytes, so renaming anything to
+    # .png must not get it uploaded.
+    path = tmp_path / "cat.png"
+    path.write_bytes(payload)
+    out = _refuse(monkeypatch, str(path))
+    assert out["ok"] is False and out["status"] == status
+    assert _mutating(transport) == [] and _sent(transport) == [], \
+        f"a {status} file must cost ZERO calls, not even the session probe"
+    assert str(tmp_path) not in repr(out), "the refusal must not echo the directory"
+    assert "cat.png" in out["error"], "the caller must learn WHICH file was refused"
+
+
+def test_an_image_over_the_cap_is_refused_without_a_single_outgoing_call(tmp_path, monkeypatch,
+                                                                        transport):
+    # The cap is OUR OWN documented choice, not a measured LinkedIn limit — this line is the
+    # only place the number lives, so the docs may state it.
+    assert server.MAX_IMAGE_BYTES == 10 * 1024 * 1024
+    path = tmp_path / "big.png"
+    path.write_bytes(_PNG_HEAD + b"\x00" * 200)
+    monkeypatch.setattr(server, "MAX_IMAGE_BYTES", 100)
+    out = _refuse(monkeypatch, str(path))
+    assert out["ok"] is False and out["status"] == "image_too_large"
+    assert _sent(transport) == [], "an oversize file must cost ZERO calls"
+    assert str(tmp_path) not in repr(out)
+
+
+def test_a_path_the_os_cannot_even_parse_returns_a_dict_instead_of_a_traceback(monkeypatch,
+                                                                              transport):
+    # Measured instance of the class "the except clause is narrower than the failure set":
+    # open() on a path with an embedded NUL raises ValueError, not OSError, and a raw traceback
+    # must never cross the tool boundary (project rule 4).
+    out = _refuse(monkeypatch, "/Users/someone/ca\0t.png")
+    assert out["ok"] is False and out["status"] == "unreadable_file"
+    assert _sent(transport) == []
+    assert "/Users/someone" not in repr(out)
 
 
 @pytest.mark.parametrize("name", sorted(WRITE_KWARGS))
@@ -492,6 +689,10 @@ def test_tool_registry_splits_into_reads_and_gated_writes():
     """
     tools = asyncio.run(server.mcp.list_tools())
     names = {t.name for t in tools}
+    # The split carries its NUMBERS here (12 reads / 20 gated writes) — the only place a count
+    # is asserted, so the docs may state it. Adding a tool changes this line on purpose.
+    assert (len(READ_CALLS), len(WRITE_KWARGS)) == (12, 20)
+    assert len(names) == 32, f"the registry must expose 12 reads + 20 gated writes, got {len(names)}"
     assert names == set(READ_CALLS) | set(WRITE_KWARGS), (
         f"tool registry drifted: unexpected={names - set(READ_CALLS) - set(WRITE_KWARGS)}, "
         f"missing={set(READ_CALLS) | set(WRITE_KWARGS) - names}")

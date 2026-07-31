@@ -595,6 +595,192 @@ def test_graphql_write_bodies_are_unchanged_by_the_errors_check(monkeypatch):
                     "queryId": _FAKE_REPOST_QID, "includeWebMetadata": True}
 
 
+# ── create_post_with_image: browserless single-part image upload ─────────
+# Owner-verified live on 2026-07-18 (asset urn D4E22AQGKhtES62GYIw). What is proven HERE is
+# offline only: the two request bodies, the false-success check, and that neither the response
+# body nor the file path can reach the return value.
+_IMG_META = {"data": {"value": {"urn": "urn:li:digitalmediaAsset:D4TESTASSET",
+                                "singleUploadUrl": "https://media.example/upload/xyz",
+                                "singleUploadHeaders": {"x-li-upload": "1"}}}}
+
+
+def _image_client(responses, monkeypatch, put_code=201):
+    """A client for the image flow: vgreq.post answers the QUEUED (code, json, text) tuples in
+    order — the flow makes TWO posts (register, then the Shares mutation) — and requests.put is
+    recorded instead of performed. No network, no cookie file.
+    """
+    calls = {"post": [], "put": []}
+    queue = list(responses)
+
+    class R:
+        def __init__(self, code, payload, text=""):
+            self.status_code, self._payload, self.text = code, payload, text
+            self.headers = {}
+
+        def json(self):
+            return self._payload
+
+    fake = types.ModuleType("vgreq")
+
+    def _post(url, body=None, *a, **k):
+        calls["post"].append((url, body))
+        return R(*(queue.pop(0) if queue else (200, {}, "")))
+
+    fake.post = _post
+    fake.get = lambda *a, **k: R(200, {}, "")
+    fake.delete = lambda *a, **k: R(200, {}, "")
+    sys.modules["vgreq"] = fake
+    import importlib
+    import lib.client as cl
+    importlib.reload(cl)
+
+    def _put(url, data=None, headers=None, timeout=None):
+        calls["put"].append((url, data, headers or {}))
+        return R(put_code, {}, "")
+
+    monkeypatch.setattr(cl.requests, "put", _put)
+    return cl.LinkedInClient(), calls
+
+
+def _image_file(tmp_path):
+    """A local file to upload — synthetic bytes, NOT a real image (nothing here decodes it)."""
+    path = tmp_path / "cat.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 40)
+    return path
+
+
+def test_upload_image_registers_the_captured_metadata_body_then_puts_the_bytes(tmp_path,
+                                                                              monkeypatch):
+    path = _image_file(tmp_path)
+    li, calls = _image_client([(200, _IMG_META, "")], monkeypatch)
+    r = li.upload_image(str(path))
+    url, body = calls["post"][-1]
+    assert "voyagerVideoDashMediaUploadMetadata?action=upload" in url
+    assert body == {"mediaUploadType": "IMAGE_SHARING", "fileSize": 48, "filename": "cat.png"}, \
+        "the register body carries the file NAME and size — never the directory"
+    put_url, put_data, put_headers = calls["put"][-1]
+    assert put_url == "https://media.example/upload/xyz"
+    assert put_data == path.read_bytes(), "the raw bytes go to the singleUploadUrl, one PUT"
+    assert put_headers["x-li-upload"] == "1" and "Content-Type" in put_headers
+    assert r == {"ok": True, "asset_urn": "urn:li:digitalmediaAsset:D4TESTASSET",
+                 "kind": "png", "size": 48}
+
+
+def test_upload_image_sends_nothing_when_the_file_cannot_be_read(tmp_path, monkeypatch):
+    # Enforced, not assumed: an unreadable file must cost ZERO transport calls, raise nothing,
+    # and the honest error must name the FILE, never the path (it lands in the transcript).
+    missing = tmp_path / "no-such-dir" / "cat.png"
+    li, calls = _image_client([(200, _IMG_META, "")], monkeypatch)
+    r = li.upload_image(str(missing))
+    assert calls["post"] == [] and calls["put"] == [], "no call may go out for a missing file"
+    assert r["ok"] is False and r["status"] == "unreadable_file"
+    assert "cat.png" in r["error"], "the caller must learn WHICH file failed"
+    assert str(tmp_path) not in repr(r), "the error must not carry the directory"
+
+
+def test_upload_image_refuses_bytes_it_has_not_classified(tmp_path, monkeypatch):
+    """Pre-flight, not trust: "readable" is not "valid". An empty file and a file that is not an
+    image by its own first bytes must both cost ZERO calls — an empty file would otherwise
+    register with fileSize=0, PUT nothing and be reported as a success.
+    """
+    cases = {"empty_file": b"", "unsupported_type": b"[core]\n\trepositoryformatversion = 0\n"}
+    for status, payload in cases.items():
+        path = tmp_path / f"{status}.png"  # the extension lies on purpose
+        path.write_bytes(payload)
+        li, calls = _image_client([(200, _IMG_META, "")], monkeypatch)
+        r = li.upload_image(str(path))
+        assert calls["post"] == [] and calls["put"] == [], f"{status} must send nothing"
+        assert r["ok"] is False and r["status"] == status
+        assert f"{status}.png" in r["error"] and str(tmp_path) not in repr(r)
+
+
+def test_upload_image_returns_a_dict_for_a_path_the_os_cannot_parse(tmp_path, monkeypatch):
+    # open() raises ValueError (not OSError) on an embedded NUL byte — a raw traceback must never
+    # cross the tool boundary (project rule 4).
+    li, calls = _image_client([(200, _IMG_META, "")], monkeypatch)
+    r = li.upload_image(str(tmp_path / "ca\0t.png"))
+    assert r["ok"] is False and r["status"] == "unreadable_file"
+    assert calls["post"] == [] and calls["put"] == []
+    assert str(tmp_path) not in repr(r)
+
+
+def test_inspect_image_classifies_by_content_and_never_returns_a_path(tmp_path, monkeypatch):
+    """The classifier is content-based: the same bytes stay a PNG under any name, and a renamed
+    non-image stays refused. It reads 12 bytes + a stat — no transport is involved at all.
+    """
+    li, calls = _image_client([], monkeypatch)
+    samples = {"png": b"\x89PNG\r\n\x1a\n", "jpeg": b"\xff\xd8\xff\xe0", "gif": b"GIF89a",
+               "webp": b"RIFF\x24\x00\x00\x00WEBP"}
+    for kind, head in samples.items():
+        path = tmp_path / f"shot.{kind}.bin"     # deliberately NOT an image extension
+        path.write_bytes(head + b"\x00" * 32)
+        probe = li.inspect_image(str(path))
+        assert probe == {"ok": True, "name": f"shot.{kind}.bin", "kind": kind,
+                         "size": len(head) + 32, "status": "ok"}
+    # a trailing slash empties basename(): the answer is a PLACEHOLDER plus the honest status —
+    # never the directory segment above it, which on "/Users/<name>/" is the user name itself.
+    probe = li.inspect_image(str(tmp_path) + "/")
+    assert probe["ok"] is False and probe["status"] == "unreadable_file"
+    assert probe["name"] == "(no file name)" and probe["kind"] == "unknown"
+    assert os.path.basename(str(tmp_path)) not in repr(probe)
+    assert calls["post"] == [] and calls["put"] == [], "classification is local only"
+
+
+def test_create_post_with_image_stops_at_the_upload_and_makes_no_share_call(tmp_path,
+                                                                           monkeypatch):
+    missing = tmp_path / "no-such-dir" / "cat.png"
+    li, calls = _image_client([(200, _IMG_META, "")], monkeypatch)
+    r = li.create_post_with_image("hi", str(missing))
+    assert calls["post"] == [] and calls["put"] == []
+    assert r["ok"] is False and r["phase"] == "upload"
+    assert str(tmp_path) not in repr(r)
+
+
+def test_create_post_with_image_uses_the_shares_mutation_with_the_image_recipe(tmp_path,
+                                                                              monkeypatch):
+    path = _image_file(tmp_path)
+    li, calls = _image_client([(200, _IMG_META, ""),
+                               (200, {"data": {}}, '{"urn":"urn:li:activity:7484249869516365824"}')],
+                              monkeypatch)
+    r = li.create_post_with_image("hi", str(path), visibility="CONNECTIONS")
+    url, body = calls["post"][-1]
+    assert "queryId=voyagerContentcreationDashShares." in url and "action=execute" in url
+    post = body["variables"]["post"]
+    assert post["media"] == {"category": "IMAGE",
+                             "mediaUrn": "urn:li:digitalmediaAsset:D4TESTASSET",
+                             "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"]}
+    assert post["visibilityDataUnion"]["visibilityType"] == "CONNECTIONS_ONLY"
+    assert post["commentary"] == {"text": "hi", "attributesV2": []}
+    assert r["ok"] is True and r["phase"] == "post"
+    assert r["urns"] == ["urn:li:activity:7484249869516365824"]
+    assert str(tmp_path) not in repr(r), "the return must not carry the image path"
+
+
+def test_create_post_with_image_detects_body_validation_error_despite_200(tmp_path, monkeypatch):
+    # The false-success class (docs/04): the share answers 200 WITH data.errors.
+    path = _image_file(tmp_path)
+    li, _ = _image_client([(200, _IMG_META, ""), (200, _GQL_ERR, "")], monkeypatch)
+    r = li.create_post_with_image("hi", str(path))
+    assert r["ok"] is False, "200 + body errors must be treated as failure"
+    assert "Invalid input" in r.get("error", "")
+    assert "urns" not in r, "a failed post must not hand back an activity urn"
+
+
+def test_image_flow_returns_no_response_body_and_no_header(tmp_path, monkeypatch):
+    # Only status, endpoint name, length and the client's own classification may come back.
+    path = _image_file(tmp_path)
+    secret = "SECRET-BODY-CONTENT"
+    li, _ = _image_client([(500, {}, secret)], monkeypatch)
+    r = li.upload_image(str(path))
+    assert r["ok"] is False and r["status"] == 500
+    assert secret not in repr(r), "a response body must never reach the return value"
+    assert r["endpoint"] == "voyagerVideoDashMediaUploadMetadata?action=upload"
+    li, _ = _image_client([(200, {"data": {"value": {}}}, secret)], monkeypatch)
+    r = li.upload_image(str(path))
+    assert r["ok"] is False and r["body_len"] == len(secret), "length only, never the body"
+    assert secret not in repr(r)
+
+
 # ── jobs reads: get_job / get_job_recommendations ────────────────────────
 # The parsing itself is proven in mcp/tests/test_jobs_parse.py against synthetic fixtures; what
 # is asserted HERE is the client layer: the exact URL, that unusable input sends NOTHING, and

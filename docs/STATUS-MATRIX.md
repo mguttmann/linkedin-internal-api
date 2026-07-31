@@ -3,8 +3,10 @@
 Overview of what is **verified** (real call, HTTP status documented) vs. **discovered**
 (seen in live traffic, schema known) vs. **inferred** (structure guessed, not yet confirmed).
 
-Every write operation below was tested live on the **owner's own account**, minimally
-invasive, and every test artifact was removed afterwards (verified clean).
+Every write operation below was tested live on the **owner's own account** and minimally invasive;
+test artifacts were removed afterwards (verified clean) **except where a note says otherwise** — for
+the image post of 2026-07-18 (note ⁵) the owner's report records that the post went live, not that it
+was deleted again, so treat that artifact as possibly still standing.
 
 ## Legend
 - ✅ **verified** — executed by us, status documented, reversion tested where applicable
@@ -13,11 +15,20 @@ invasive, and every test artifact was removed afterwards (verified clean).
 - **[O] open item** — the MCP tool is known **not to work today** and the cause or the missing
   artifact is open. Not a status of the endpoint: it says "do not rely on this tool". Every `[O]`
   has an entry in `BACKLOG.md` with the ranked candidates and the exact next capture.
-- **(owner-run)** — provenance marker, stated here **once** and only referred to elsewhere: the call
-  was executed by the repo owner in his own live session on **2026-07-30 against commit `5a251da`**
-  and reported with its HTTP status. The sessions that wrote the code had no session of their own, so
-  wherever this marker stands, the measurement is the owner's — and it covers **exactly** the paths he
-  ran, never a neighbouring one. A ✅ without it is an earlier live run of this repo.
+- **(owner-run)** — provenance marker, defined here **once** and only referred to elsewhere: the call
+  was executed by the repo owner in his own live session and reported with its HTTP status. The
+  sessions that wrote the code had no session of their own, so wherever this marker stands, the
+  measurement is the owner's — and it covers **exactly** the paths he ran, never a neighbouring one.
+  **Every use names its own run**, because a marker pinned to a single date and commit would claim a
+  wrong date the moment it is reused. The runs recorded so far:
+  - **2026-07-30, against commit `5a251da`** — the jobs reads (`get_job`,
+    `get_job_recommendations`); see the jobs live-run note below.
+  - **2026-07-18, against code that was not committed at the time** — the image post
+    (`create_post_with_image`); the code reached the repo later and untouched in that respect, see
+    note ⁵. What the run proves: the upload + share path executed and the post went live
+    (asset URN `D4E22AQGKhtES62GYIw`).
+
+  A ✅ without the marker is an earlier live run of this repo.
 
 ## Read operations (GET)
 
@@ -143,6 +154,7 @@ verified live. See `04-WRITE-OPERATIONS.md` for full request/body schemas.
 | **Delete post** | SDUI | `com.linkedin.sdui.update.deletePost` | 🔍 schema captured (browser); browserless **not proven** ³ |
 | **Poll** | Voyager | `PollsPollSummary` → `Shares` `media.mediaUrn` (URN_REFERENCE) | ✅ verified (browserless, docs/24) |
 | **Post media (image/video)** | Voyager | `MediaUploadMetadata?action=upload` → PUT → `Shares` asset | ✅ captured (docs/24) |
+| **Post with an image** (MCP `create_post_with_image`) | Voyager | `voyagerVideoDashMediaUploadMetadata?action=upload` → single PUT → `Shares` with `media.category=IMAGE` | ✅ verified (owner-run 2026-07-18, browserless) — the **hardenings** added when the code landed are offline-proven only ⁵ |
 | **@mention in post** | Voyager | `commentary.attributesV2.profileMention` | ✅ verified (docs/24) |
 | **Link preview** | Voyager | `graphql voyagerContentcreationDashUpdateUrlPreview` | ✅ verified (browserless, GET) |
 | **Save / unsave post** | SDUI | `com.linkedin.sdui.update.saveState` (`isSaved` toggle) | ✅ verified (browserless) |
@@ -219,6 +231,43 @@ test that counts calls on a fake `vgreq` and requires zero get/post/delete
 (`mcp/server.py:312`, in `delete_repost`), so the claim is "no mutating call", not "an empty wire"
 (`10-POST-INTERACTIONS.md`). Offline-proven, **not yet live-tested**; the tool stays **[O]** until a
 captured hash exists.
+
+⁵ **Post with an image — added 2026-07-31, and the two halves have different provenance.**
+The *route* is owner-run: on **2026-07-18** the owner ran the browserless single-part upload plus the
+share in his own session, the asset URN `D4E22AQGKhtES62GYIw` came back and the post went live. That
+is the ✅ — a metadata POST that answers with a `singleUploadUrl`, one raw PUT of the file bytes to
+that URL, then the same `Shares` mutation as `create_post` with `media.category=IMAGE` and the
+`feedshare-image` recipe. Images need no processing wait (unlike video). The URN stays recorded in the
+docstrings of `upload_image()` and `create_post_with_image()` in `mcp/lib/client.py` as the
+verification receipt.
+The *hardenings* applied while bringing the code onto `main` are **offline-proven against fixtures and
+not live-tested** — nobody re-ran the live call for them: (a) a path-free pre-flight
+(`inspect_image()` in `mcp/lib/client.py`) classifies the file once, locally, from its own first
+bytes, and every other step reads that result: an unreadable, empty or non-image file is refused at
+**zero** outgoing calls, counted by a test rather than assumed; (b) uploads are restricted to
+PNG/JPEG/GIF/WEBP **by file signature, not by extension**, and to **10 MiB** (`MAX_IMAGE_BYTES` in
+`mcp/server.py`) — both are **our own** choices, not measured LinkedIn limits, and the refusal is a
+guardrail in the server layer per `MCP-DESIGN.md` §5; (c) the confirmation payload names the **file
+name, type and size**, never a path, because a tool response lands in the MCP transcript
+(`create_post_with_image` in `mcp/server.py`); (d) the file-read path is wrapped in
+`except (OSError, ValueError)` — the `ValueError` covers a path with an embedded NUL byte, which would
+otherwise leave the tool as a raw traceback; (e) the share answer runs through the shared
+`_gql_errors()` chokepoint, so a 200-with-`ValidationError` reads as `ok: False`; (f) the return
+carries only status, endpoint name, byte length, asset URN and the client's own classification — no
+response body, no header, no path.
+Known honest limits, all read off the code and none of them live-measured: cap and type check bind the
+**pre-flight snapshot, not the bytes that leave** (three separate reads of the file, the payload read
+itself unbounded), and the signature check reads a **prefix** — so a valid image header with arbitrary
+data appended passes, and any genuine image the process can read still goes out; the file is read
+**wholly into memory** with no chunking; **transport exceptions are not caught** on the PUT or the
+share POST, so a timeout or DNS failure still leaves the tool as a raw traceback carrying the target
+URL (pre-existing for every write tool here, worst on this one because the target comes from the
+response); the upload target URL and its headers come from the metadata **response**, unchecked and
+with library-default redirect following; and the `urns` field of the success return is a **scrape of
+the share response text** — `04-WRITE-OPERATIONS.md`, section "Create post", documents that the post
+URN comes from the follow-up closed-sharebox SDUI call instead, so treat `urns` as unverified and
+confirm a post through the independent read (`get_my_posts`). Details and the open owner decisions in
+`04-WRITE-OPERATIONS.md`, section "Post with an image".
 
 ## Important corrections (paths that do NOT work)
 

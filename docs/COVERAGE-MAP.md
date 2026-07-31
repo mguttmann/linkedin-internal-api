@@ -25,7 +25,10 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
   recommendations **endpoint** is not verified usable, only the tool's honest `unknown` on a
   container-less 200 is. Provenance and scope: `STATUS-MATRIX.md`, legend entry "(owner-run)" and the
   jobs live-run note; remaining open items in `27-JOBS.md` §6)
-- *Posts:* `create_post` (+poll_urn), `edit_post`, `delete_post`, `create_poll`, `save_post`,
+- *Posts:* `create_post` (+poll_urn), `create_post_with_image` (browserless single-part upload;
+  live-verified by the **owner's** run of 2026-07-18 — provenance and the exact scope in
+  `STATUS-MATRIX.md`, legend entry "(owner-run)" and note 5 — while the hardenings that came with the
+  code are offline-proven only), `edit_post`, `delete_post`, `create_poll`, `save_post`,
   `repost`, `delete_repost` (repost create browserless 200; repost delete captured via browser
   only — the `delete_repost` tool is **not operational** and now **refuses up front, without ever
   sending the delete request**, see §1)
@@ -44,6 +47,25 @@ SDUI route through vgreq's Voyager headers (`mcp/lib/client.py:242`) and is live
 order is fixed: the read-only gate answers **first**, so `confirm=True` never buys a write while the
 flag is set. Offline-proven per tool with the transport counted, not yet live-tested; scope
 and honest limit in `26-READ-ONLY-MODE.md`.
+The split itself is asserted, not claimed: one test pins the registry at **12 reads and 20 gated
+writes** (`test_tool_registry_splits_into_reads_and_gated_writes` in `mcp/tests/test_readonly.py`) and
+compares the exposed tool names against the two tables it drives, so a future writing tool that is
+added without a gate fails there instead of shipping. Counting note: the 12 include `session_status`
+and `refresh_session`, which the tool list above names separately under *Session*. Adding a tool
+changes that line on purpose — it is the only place in this repo where a tool count is held by a test,
+which is why it is the only count these docs state.
+
+**Path leaks in tool responses (added 2026-07-31):** a tool response is transcript content, so an
+absolute filesystem path in one leaks the user name and the directory layout. The guard used to be a
+blacklist of one known string (`/tmp/`), which an ordinary home-directory path walked straight past.
+It now tests the **class**: every gated tool is called without `confirm`, every path-shaped argument is
+poisoned with a `$HOME` path first, and the whole nested return value is walked recursively for
+cookie markers and for anything that looks like an absolute or `~`-rooted path
+(`test_no_gated_tool_leaks_a_cookie_or_a_filesystem_path` in `mcp/tests/test_readonly.py`). A second
+test, `test_the_path_leak_probe_is_not_vacuous`, keeps the predicate from failing open in either
+direction — a set of leak shapes must be caught, including the old `/tmp/` instance, and legitimate
+payload values such as URNs, a bare file name or `https://…` must not. Offline-proven; the class-guard
+idea, not the list, is the point.
 
 **Honesty of the write results (added 2026-07-31):** a GraphQL write can answer HTTP 200 and still
 carry a `ValidationError` in the body. `create_poll` and `delete_repost` used to report `ok` purely
@@ -97,6 +119,7 @@ more than the evidence carries):
 | Create post (text) | `graphql voyagerContentcreationDashShares` | ✅ MCP `create_post` (browserless live) |
 | Delete post | SDUI `com.linkedin.sdui.update.deletePost` | 🔍 schema captured (browser-capture); **browserless not proven** — see `ENDPOINTS.md` + `BACKLOG.md` |
 | Post with **image/video/document** | Voyager `MediaUploadMetadata`→PUT→`Shares` asset | ✅ captured (docs/24) |
+| Post with an **image** (end to end) | `voyagerVideoDashMediaUploadMetadata?action=upload`→single PUT→`Shares` `media.category=IMAGE` | ✅ MCP `create_post_with_image` (browserless, **owner-run 2026-07-18**, asset URN returned and the post went live). Only the image path is covered — video hangs off the same metadata route but is **not** implemented as a tool and not proven. The hardenings shipped with the code (a path-free pre-flight that classifies the file by its own first bytes, a signature allowlist for PNG/JPEG/GIF/WEBP and a 10 MiB cap as **our own** guardrails in the server layer, file name + type + size instead of the path in the confirmation, honest error with zero calls on an unreadable/empty/non-image file, `_gql_errors()` on the share, body-free returns) are **offline-proven, not live-tested**, and the honest limits — cap and type check bind the pre-flight snapshot rather than the bytes that leave, signature checked as a prefix, whole file in memory, transport exceptions uncaught, upload target taken from the response, `urns` an unverified scrape — are in `STATUS-MATRIX.md` note 5 and `04-WRITE-OPERATIONS.md`, section "Post with an image" |
 | Post with **@mention** of a person | `commentary.attributesV2.profileMention` | ✅ verified (docs/24) |
 | Post with **link preview** | `voyagerContentcreationDashUpdateUrlPreview` | ✅ MCP `get_link_preview` (browserless 200) |
 | Post **poll** | `PollsPollSummary`→`Shares` URN_REFERENCE | ✅ MCP `create_poll` + `create_post(poll_urn)` (browserless live) |

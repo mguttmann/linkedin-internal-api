@@ -161,6 +161,128 @@ Body:
 
 ---
 
+## ✅ Post with an image — VERIFIED live by the OWNER (Voyager, browserless, single PUT)
+
+Two calls plus the ordinary share. No browser, no multipart finalize step, and — unlike video — no
+wait for processing.
+
+**1. Register the upload.**
+
+```
+POST /voyager/api/voyagerVideoDashMediaUploadMetadata?action=upload
+Body: { "mediaUploadType": "IMAGE_SHARING", "fileSize": <bytes>, "filename": "<file name>" }
+→ data.value.urn               = urn:li:digitalmediaAsset:<id>
+  data.value.singleUploadUrl   = the URL the bytes go to
+  data.value.singleUploadHeaders = headers to replay on the PUT
+```
+
+**2. PUT the raw bytes** to `singleUploadUrl`, with those headers. A 200/201/204 means the asset
+holds the image.
+
+**3. Share it** — the same `Shares` mutation as *Create post* above, with media added:
+
+```
+"media": { "category": "IMAGE",
+           "mediaUrn": "urn:li:digitalmediaAsset:<id>",
+           "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"] }
+```
+
+**Verification:** ✅ the owner ran this in his own live session on **2026-07-18** — asset URN
+`D4E22AQGKhtES62GYIw` came back and the post went live. That is the whole of the live evidence: the
+happy path, once. Provenance and its limits: `STATUS-MATRIX.md`, legend entry "(owner-run)" and note 5.
+The URN stays in the docstrings of `upload_image()` and `create_post_with_image()` in
+`mcp/lib/client.py` as the receipt.
+
+> **What was hardened when the code landed on `main` — offline-proven against fixtures, NOT
+> live-tested.** Nobody re-ran the live call for any of the following; each is held by a test that
+> counts transport calls rather than trusting the code to be quiet.
+> - **The payload is classified before a single byte goes out.** `inspect_image()` in
+>   `mcp/lib/client.py` stats the file and reads its first 12 bytes — locally, no outgoing call,
+>   never raising — and answers `{ok, name, kind, size, status}`, with no directory component
+>   anywhere in it. Confirmation, refusal and upload all read that one result instead of each
+>   looking at the file for themselves. The rule behind it: *readable* is not *valid*. An empty file
+>   used to register with `fileSize: 0`, PUT zero bytes and be reported as a success on a post with
+>   a blank image; it is now `status: "empty_file"` at zero calls.
+> - **Content, not the extension, decides what may be uploaded.** A signature allowlist — PNG,
+>   JPEG, GIF, and WEBP via `RIFF….WEBP` — because renaming a file must not decide which bytes we
+>   hand to LinkedIn. Anything else is `unsupported_type` with zero calls. The type set is **our
+>   own** choice, matching what a feed share accepts in practice; no upload of a rejected type was
+>   ever attempted live, so the mapping itself is unverified against LinkedIn.
+> - **A size cap of 10 MiB** (`MAX_IMAGE_BYTES` in `mcp/server.py`), deliberately **not** presented
+>   as a LinkedIn limit: nothing above it has ever been uploaded from here, so we refuse instead of
+>   guessing. The refusal is a guardrail and therefore lives in the server layer
+>   (`MCP-DESIGN.md` §5); byte access stays in the client. The number may be stated here because a
+>   test holds it (`test_an_image_over_the_cap_is_refused_without_a_single_outgoing_call` in
+>   `mcp/tests/test_readonly.py`).
+> - **The confirmation names the file, its type and its size — never the path.** The
+>   `needs_confirmation` payload carries `image_name` (base name only; `(no file name)` when a
+>   trailing slash leaves the base name empty), `image_kind`, `image_bytes` and `image_status`
+>   (`create_post_with_image` in `mcp/server.py`). A tool response ends up in the MCP transcript,
+>   where a full path would publish the user name and the directory layout while adding nothing to
+>   the one judgement the caller has to make: *what* is about to become a public post. Type and size
+>   answer that; the path does not. The gate returns **before** `ensure_session()` — no session and
+>   no outgoing call. It is not free of local reads: the pre-flight stat and 12-byte read happen
+>   ahead of the gate on purpose, so that the question can carry type and size at all, and
+>   `inspect_image()` never raises so that this read cannot turn a question into an error.
+> - **An unreadable, missing or unparsable path costs zero calls.** The pre-flight sits in
+>   `try/except (OSError, ValueError)` — `ValueError` as well, because an embedded NUL byte in the
+>   path makes `open()` raise it and that would otherwise cross the tool boundary as a raw
+>   traceback. The failure is a flat dict — `ok: False`, `step: "read"`, `status:
+>   "unreadable_file"` — whose message names the file, never the path. This covers the **file-read**
+>   path; transport exceptions are a separate, still-open case, see the limits below.
+> - **The share runs through the `_gql_errors()` chokepoint** (see *Create post* above), so a
+>   200 carrying a `ValidationError` reads as `ok: False` and no URN is handed back. It is not an
+>   inline copy of the check: the existing AST regression guard picked the new method up on its own.
+> - **The return carries no response body and no header** — only status, the endpoint name, the byte
+>   length, the asset URN, the visibility, the phase and the client's own classification.
+>
+> **Honest limits, read off the code and none of them live-measured.** They are named here because
+> the caller's blast radius depends on them:
+> - **The cap and the type check bind the pre-flight snapshot, not the bytes that leave.** The file
+>   is opened three times on one successful call — once by the gate, once by the pre-flight inside
+>   `upload_image()`, and once for the payload read, which is itself unbounded (the client does not
+>   know `MAX_IMAGE_BYTES`). A file that changes between those reads is uploaded unchecked and
+>   unbounded. Exploiting that needs a second local writer racing us, so the practical risk is low —
+>   but the control is a property of a moment, not of the payload, and should be read that way.
+> - **The signature check reads a prefix.** A file that starts with a valid PNG header and carries
+>   arbitrary data behind it passes and is uploaded whole. And the check limits the *type*, never the
+>   *intent*: any genuine image the process can read still goes out — a private photo, a screenshot
+>   showing credentials. In an MCP setting `confirm` is typically set by the model, so the type,
+>   size and file name in the confirmation are the whole of the human-readable evidence.
+>   A location restriction (an allowed directory) is an **open owner decision**, not implemented, and
+>   not yet a `BACKLOG.md` entry — the ticket that wrote this section could not touch that file.
+> - The file is read **wholly into memory** — no chunking. The cap bounds the measured size, the
+>   process RAM bounds the rest. Streaming (`data=fh`) was deliberately not introduced: it changes
+>   `Content-Length` / transfer encoding on the one PUT the owner actually proved.
+> - **A transport exception is not caught.** Neither the PUT nor the share POST sits in a
+>   `try/except`, so a timeout, a DNS failure, or a non-HTTP scheme in the response-supplied target
+>   propagates out of the tool as a raw exception — against the rule that no traceback crosses the
+>   tool boundary. Two consequences: the `requests` message carries the target host or URL, i.e. the
+>   short-lived signed upload URL, into the transcript, and after a successful PUT the `asset_urn` is
+>   lost with it. This is pre-existing for every write tool in this repo (the transport layer wraps
+>   nothing), and worst here because the target comes from a response instead of being hard-coded.
+>   Not fixed in this ticket.
+> - The upload **target URL and its headers come from the metadata response** — the only place in
+>   this client where an outgoing target is not hard-coded — with no scheme or host check, and the
+>   PUT uses the library default for redirects (`lib/vgreq.py` sets `allow_redirects=False`
+>   throughout; this call does not), so a 3xx would carry method and body onward to the new location.
+>   The PUT goes out through bare `requests` **without** the session, so no cookies travel with it.
+>   Forcing `https`, `allow_redirects=False` and a host allowlist are **open owner decisions**: no
+>   capture in this repo records the upload host, so we would be guessing at the shape.
+> - `urns` in the success return is a **regex scrape of the share response text** and is therefore
+>   unverified: *Create post* above documents that the post URN comes from the follow-up
+>   closed-sharebox SDUI call, not from this response. The field may be absent, and with more than
+>   one match it is not proven that the first is ours. Confirm a post through the independent read
+>   (`get_my_posts`), which is what the `note` in the return says.
+> - **Multi-step write, partial state.** If the upload succeeds and the share fails, the asset is
+>   already in the media store; the failure return says so only implicitly, through `asset_urn` and
+>   `phase: "post"` — there is no `note` on that branch, at exactly the point where an outgoing side
+>   effect has already happened. A retry uploads again and leaves another orphan. Nothing cleans
+>   this up today.
+> - Video hangs off the same metadata route but is **not** implemented as a tool and not proven.
+
+---
+
 ## ✅ Delete post — VERIFIED (SDUI)
 
 ```
@@ -359,6 +481,7 @@ the field → click save (`.click()`) → capture the save request. See
 | **Poll** | Voyager | `PollsPollSummary` → `Shares` URN_REFERENCE | ✅ verified browserless (docs/24) |
 | **@mention** | — | `commentary.attributesV2.profileMention` | ✅ verified (docs/24) |
 | **Media (image/video)** | Voyager | `MediaUploadMetadata` → PUT → `Shares` asset | ✅ captured (docs/24) |
+| **Post with an image** | Voyager | `voyagerVideoDashMediaUploadMetadata?action=upload` → single PUT → `Shares` `media.category=IMAGE` | ✅ verified browserless, **owner-run 2026-07-18** — MCP `create_post_with_image`; hardenings and limits offline-proven only, see the section above |
 | **Save/unsave post** | SDUI | `com.linkedin.sdui.update.saveState` | ✅ verified browserless |
 | **Repost / delete repost** | SDUI / Voyager | `createInstantRepost` / `voyagerFeedDashReposts` | repost: ✅ verified (browser only) · delete repost: 🔍 endpoint captured, MCP tool **not operational** — see `STATUS-MATRIX.md` note 4 |
 | **Send / recall / react DM** | Voyager | `messengerMessages?action=…` | ✅ verified browserless (docs/06) |

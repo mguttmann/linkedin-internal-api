@@ -27,6 +27,11 @@ from lib.client import LinkedInClient
 mcp = FastMCP("linkedin 🔗")
 li = LinkedInClient()
 
+# Upload guardrail (docs/MCP-DESIGN.md §5), OUR OWN choice — NOT a measured LinkedIn limit:
+# nothing above this size has been uploaded from here, so we refuse instead of guessing. It
+# bounds create_post_with_image, which reads the whole file into memory before the PUT.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
 
 # ── Read-only mode (operational guardrail, see docs/MCP-DESIGN.md §5) ────
 # LINKEDIN_READ_ONLY only ever switches writes OFF — it never grants anything. Off means:
@@ -380,6 +385,34 @@ def create_post(text: str, visibility: str = "PUBLIC", poll_urn: str = "",
         return {"needs_confirmation": True, "preview": text, "visibility": visibility}
     li.ensure_session()
     return li.create_post(text, visibility, poll_urn)
+
+
+@mcp.tool
+@write_tool
+def create_post_with_image(text: str, image_path: str, visibility: str = "PUBLIC",
+                           confirm: bool = False) -> dict:
+    """Publish a post with an image (browserless single-part upload, verified live by the owner
+    on 2026-07-18: asset URN D4E22AQGKhtES62GYIw, the post went live).
+    image_path: local path to a PNG/JPEG/GIF/WEBP file; larger than MAX_IMAGE_BYTES or not an
+    image by its own first bytes → refused without any outgoing call.
+    People-facing → requires confirm=True."""
+    probe = li.inspect_image(image_path)  # local stat + 12 bytes, no outgoing call, never raises
+    if not confirm:
+        # The confirmation names the FILE NAME, its measured TYPE and SIZE — never a directory:
+        # the payload lands in the MCP transcript, and the caller has to be able to judge WHAT
+        # would become a public post. A path adds nothing to that judgement.
+        return {"needs_confirmation": True, "preview": text, "image_name": probe["name"],
+                "image_kind": probe["kind"], "image_bytes": probe["size"],
+                "image_status": probe["status"], "visibility": visibility}
+    # Guardrail (docs/MCP-DESIGN.md §5): the REFUSAL lives here, the byte access in the client.
+    if not probe["ok"]:
+        return {"ok": False, "step": "read", "status": probe["status"], "error": probe["error"]}
+    if probe["size"] > MAX_IMAGE_BYTES:
+        return {"ok": False, "step": "read", "status": "image_too_large",
+                "error": f"{probe['name']} is {probe['size']} bytes; this MCP refuses to upload "
+                         f"more than {MAX_IMAGE_BYTES} bytes"}
+    li.ensure_session()
+    return li.create_post_with_image(text, image_path, visibility)
 
 
 @mcp.tool

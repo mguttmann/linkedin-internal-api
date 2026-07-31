@@ -46,6 +46,16 @@ SHARES_QID = "voyagerContentcreationDashShares.80089eb2e82a2dfa23cb621fb09eb7bf"
 SHARES_EDIT_QID = "voyagerContentcreationDashShares.f2afb8a73071c94140f970bdb7e48fb3"
 POLL_QID = "voyagerFeedDashPollsPollSummary.f8ad99cf791d833d37dddb373d06fb3a"
 
+# File signatures for the image types the feed share accepts (see inspect_image). Content, not
+# extension: a rename must not decide which bytes we hand to LinkedIn. WEBP is checked
+# separately (RIFF....WEBP), because its marker is not a prefix.
+IMAGE_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"\xff\xd8\xff", "jpeg"),
+    (b"GIF87a", "gif"),
+    (b"GIF89a", "gif"),
+)
+
 
 class LinkedInClient:
     """Pure requests-based LinkedIn client (vgreq). NO browser, ever.
@@ -662,6 +672,147 @@ class LinkedInClient:
         if ok:
             out["note"] = ("posted; the activity/share URN comes from the follow-up "
                            "closed-sharebox SDUI call (docs/04) — call get_my_posts to confirm")
+        elif errors:
+            out["error"] = errors[0].get("message", "GraphQL validation error")
+        else:
+            out["error"] = "post failed — queryId hash may be stale (re-grab via capture)"
+        return out
+
+    @staticmethod
+    def inspect_image(image_path: str) -> dict:
+        """Path-free pre-flight for a local image file — NO outgoing call, never raises.
+
+        Returns {ok, name, kind, size, status} (+ `error` when not ok). `name` is the basename
+        only and `kind` comes from the first bytes of the file (content, not the extension —
+        renaming a file must not decide what we upload). Nothing in the return value carries a
+        directory: every tool response lands in the MCP transcript.
+        The type set is our own choice, matching what a feed share accepts in practice; the
+        classification is offline-proven only (no live upload of a rejected type was made).
+        """
+        # A trailing slash makes basename() empty — a placeholder, NEVER the directory name
+        # above it: on "/Users/<name>/" that segment is the user name itself.
+        name = os.path.basename(image_path) or "(no file name)"
+        # ValueError too, not just OSError: an embedded NUL byte in the path makes open() raise
+        # ValueError, which would cross the tool boundary as a raw traceback (project rule 4).
+        try:
+            size = os.stat(image_path).st_size
+            with open(image_path, "rb") as fh:
+                head = fh.read(12)
+        except (OSError, ValueError):
+            return {"ok": False, "name": name, "kind": "unknown", "size": 0,
+                    "status": "unreadable_file",
+                    "error": f"image file missing or not readable: {name}"}
+        if not size or not head:
+            # An empty file would register with fileSize=0 and PUT zero bytes — LinkedIn might
+            # accept it and we would report a false success on a post with a blank image.
+            return {"ok": False, "name": name, "kind": "unknown", "size": size,
+                    "status": "empty_file", "error": f"image file is empty: {name}"}
+        kind = None
+        for magic, label in IMAGE_MAGIC:
+            if head.startswith(magic):
+                kind = label
+                break
+        if kind is None and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+            kind = "webp"
+        if kind is None:
+            return {"ok": False, "name": name, "kind": "unknown", "size": size,
+                    "status": "unsupported_type",
+                    "error": f"not a PNG/JPEG/GIF/WEBP image (checked the file's own bytes): "
+                             f"{name}"}
+        return {"ok": True, "name": name, "kind": kind, "size": size, "status": "ok"}
+
+    def upload_image(self, image_path: str) -> dict:
+        """Upload one image for a feed share — browserless, single PUT (no multipart finalize).
+        POST voyagerVideoDashMediaUploadMetadata?action=upload {mediaUploadType: IMAGE_SHARING}
+        answers with the digitalmediaAsset urn + a singleUploadUrl; the raw bytes go there.
+        VERIFIED live by the OWNER on 2026-07-18 (asset urn D4E22AQGKhtES62GYIw).
+        Returns {ok, asset_urn, kind, size}. Never returns a response body, a header or the path.
+        PRE-FLIGHT (offline-proven only, added after the live run): the payload is classified by
+        inspect_image() first — an unreadable, empty or non-image file costs ZERO calls. We do
+        not upload bytes we have not looked at ("readable" is not "valid").
+        HONEST LIMIT: the file is read WHOLLY into memory (no chunking) and this method enforces
+        NO size cap — the size policy is a guardrail and lives in mcp/server.py
+        (docs/MCP-DESIGN.md §5); the bound here is the caller's RAM.
+        """
+        probe = self.inspect_image(image_path)
+        if not probe["ok"]:
+            # Honest error BEFORE any outgoing call, and no traceback at the tool boundary.
+            # Names the FILE, never the path — tool responses land in the MCP transcript.
+            return {"ok": False, "step": "read", "status": probe["status"],
+                    "error": probe["error"]}
+        name = probe["name"]
+        try:
+            with open(image_path, "rb") as fh:
+                data = fh.read()
+        except (OSError, ValueError):  # raced away between the probe and the read
+            return {"ok": False, "step": "read", "status": "unreadable_file",
+                    "error": f"image file missing or not readable: {name}"}
+        if not data:
+            return {"ok": False, "step": "read", "status": "empty_file",
+                    "error": f"image file is empty: {name}"}
+        url = f"{BASE}/voyagerVideoDashMediaUploadMetadata?action=upload"
+        r = self._vg().post(url, {"mediaUploadType": "IMAGE_SHARING",
+                                  "fileSize": len(data), "filename": name})
+        endpoint = "voyagerVideoDashMediaUploadMetadata?action=upload"
+        if r.status_code not in (200, 201):
+            return {"ok": False, "step": "register", "status": r.status_code,
+                    "endpoint": endpoint,
+                    "error": "upload registration failed — re-capture the metadata call"}
+        try:
+            val = (r.json().get("data", {}) or {}).get("value", {}) or {}
+        except Exception:
+            val = {}
+        asset_urn, single = val.get("urn"), val.get("singleUploadUrl")
+        if not asset_urn or not single:
+            return {"ok": False, "step": "register", "status": r.status_code,
+                    "endpoint": endpoint, "body_len": len(r.text or ""),
+                    "error": "no asset urn / singleUploadUrl in the response — re-capture"}
+        hdrs = dict(val.get("singleUploadHeaders") or {})
+        hdrs.setdefault("Content-Type", "application/octet-stream")
+        pr = requests.put(single, data=data, headers=hdrs, timeout=120)
+        if pr.status_code not in (200, 201, 204):
+            return {"ok": False, "step": "put", "status": pr.status_code,
+                    "endpoint": "singleUploadUrl", "asset_urn": asset_urn, "size": len(data),
+                    "error": "the upload endpoint rejected the image bytes"}
+        return {"ok": True, "asset_urn": asset_urn, "kind": probe["kind"], "size": len(data)}
+
+    def create_post_with_image(self, text: str, image_path: str,
+                               visibility: str = "PUBLIC") -> dict:
+        """Full flow: upload an image, then publish a post carrying it.
+        VERIFIED live by the OWNER on 2026-07-18 (asset urn D4E22AQGKhtES62GYIw, the post went
+        live). Same Shares mutation as create_post with media.category=IMAGE and the
+        feedshare-image recipe; images need no processing wait (unlike video).
+        Returns status + the asset urn; on failure an honest dict without body or path.
+        """
+        up = self.upload_image(image_path)
+        if not up.get("ok"):
+            return {**up, "ok": False, "phase": "upload"}
+        asset_urn = up["asset_urn"]
+        vis = "CONNECTIONS_ONLY" if str(visibility).upper().startswith("CONNECT") else "ANYONE"
+        url = f"{BASE}/graphql?action=execute&queryId={SHARES_QID}"
+        post = {
+            "allowedCommentersScope": "ALL",
+            "intendedShareLifeCycleState": "PUBLISHED",
+            "origin": "FEED",
+            "visibilityDataUnion": {"visibilityType": vis},
+            "commentary": {"text": text, "attributesV2": []},
+            "media": {"category": "IMAGE", "mediaUrn": asset_urn,
+                      "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"]},
+        }
+        body = {"variables": {"post": post}, "queryId": SHARES_QID, "includeWebMetadata": True}
+        r = self._vg().post(url, body)
+        # CRITICAL: a 200 can still carry a GraphQL ValidationError — same chokepoint as
+        # create_post, never an inline re-implementation (docs/04).
+        errors = self._gql_errors(r)
+        ok = r.status_code in (200, 201) and not errors
+        out = {"status": r.status_code, "ok": ok, "visibility": vis,
+               "asset_urn": asset_urn, "phase": "post"}
+        if ok:
+            import re as _re
+            urns = sorted(set(_re.findall(r"urn:li:(?:share|activity):\d+", r.text or "")))
+            if urns:
+                out["urns"] = urns[:4]
+            out["note"] = "posted with image; confirm via get_my_posts (independent read)"
         elif errors:
             out["error"] = errors[0].get("message", "GraphQL validation error")
         else:

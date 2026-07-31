@@ -19,7 +19,7 @@ EXPECTED = {"get_me", "get_my_posts", "get_profile", "get_notifications",
             "session_status", "refresh_session", "like", "unlike", "follow_company",
             "connect", "endorse_skill", "remove_connection",
             "save_post", "repost", "delete_repost",
-            "create_post", "delete_post", "edit_post", "create_poll",
+            "create_post", "create_post_with_image", "delete_post", "edit_post", "create_poll",
             "send_dm", "recall_message", "react_to_message",
             "create_comment", "delete_comment", "react_to_comment"}
 
