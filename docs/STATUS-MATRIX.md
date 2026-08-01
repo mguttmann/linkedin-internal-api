@@ -23,11 +23,19 @@ was deleted again, so treat that artifact as possibly still standing.
   wrong date the moment it is reused. The runs recorded so far:
   - **2026-07-30, against commit `5a251da`** — the jobs reads (`get_job`,
     `get_job_recommendations`); see the jobs live-run note below.
-  - **2026-07-31, jobs feed** (`count:5`, `queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`)
+  - **2026-07-31, jobs feed — the measured BODY** (`count:5`,
+    `queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`)
     — the owner measured the **response shape** of the feed: the container path, the three-hop
     module→union→card chain, the module and card key sets, the 18 union branch names and the values of one
-    card. A measured **body is not an executed tool**: this run makes the *shape* 🔍 and makes nothing ✅,
-    because the code that reads it never ran live. See `27-JOBS.md` §1.3.
+    card. A measured **body is not an executed tool**: this run made the *shape* 🔍 and made nothing ✅,
+    because the code that reads it had not run live at that point. See `27-JOBS.md` §1.3.
+  - **2026-07-31, jobs feed — the EXECUTED read, against commit `75afead`** — a different run from the
+    one above and it must not be merged with it: here the owner ran the tool
+    (`get_job_recommendations(5)`) in his own session, after clearing the bytecode cache so the run is
+    attributable to that commit's code. It answered **HTTP 200** and the three-hop reader produced
+    correct cards on a real body. This run makes the **read** ✅ — and only the paths it walked; the
+    error paths it did not trigger stay fixture-proven. See the jobs live-run note below and
+    `27-JOBS.md` §4.0.
   - **2026-07-18, against code that was not committed at the time** — the image post
     (`create_post_with_image`); the code reached the repo later and untouched in that respect, see
     note ⁵. What the run proves: the upload + share path executed and the post went live
@@ -53,7 +61,7 @@ was deleted again, so treat that artifact as possibly still standing.
 | Notifications | `voyagerIdentityDashNotificationCards?q=filterVanityName` | ✅ 200 |
 | Any profile by vanityName | `identity/dash/profiles?q=memberIdentity` | ✅ 200 |
 | Search | `graphql voyagerSearchDashClusters` | 🔍 |
-| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | 🔍 endpoint **and** 🔍 response shape (owner-run 2026-07-31) — still **not** verified usable. The **tool's honesty behaviour is ✅ (owner-run 2026-07-30)**: on a live HTTP 200 whose body held no collection container under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `ok: false` with the re-capture note — **not** `empty`. The owner then measured the body himself: the container is `data.data.jobsDashJobsFeedAll.*elements` and the chain is **three** hops (module → union branch → job card), so the entry level points at **modules**, not at job cards (`27-JOBS.md` §1.3). A reader for that chain exists and is proven **offline** against a fixture of the measured form — **no ✅**, it has never run live (`27-JOBS.md` §7). One consequence for reading the numbers: `paging.total` counts **modules** on this route, so `paging_total > 0` next to `count: 0` is a legitimate promotion-only feed, not an error (the withdrawn invariant, `27-JOBS.md` §3). The offline suite is green; the open items are measured by review probes and are listed in `27-JOBS.md` §6 — the one to know about is that an entity the reader does not recognise as a module can still be projected into a card whose id comes from a foreign position. That is **narrowed but not closed**: an entry the starred list names by **URN** — the measured shape — is now `drift`/`ok=false` instead of a card, held by tests; an entry standing **inlined** in the starred list, and the same shape on the non-starred (search) path, still produce it (§6 item 10) |
+| Jobs (recommendations) | `graphql voyagerJobsDashJobsFeed` | ✅ 200 (owner-run 2026-07-31, executed against `75afead`) — MCP `get_job_recommendations`, and the endpoint is now verified **usable**, not merely reachable. `get_job_recommendations(5)` answered **HTTP 200** with `ok: true`, `state: "hits"`, `count: 3`, `read_entries: 5`, `discarded: 0`, `paging_total: 9`, `endpoint voyager.graphql.jobsFeed`. The three-hop projection (module → union branch → job card, `27-JOBS.md` §1.3) held on a **real** body: three job cards out of five modules, employer and location split correctly out of the one `primaryDescription` string, and the advertising / upsell / `TABBED` / empty modules skipped silently and without an error. The owner counted `jobPostingCardWrapper` in the **raw** body himself — three in five modules — so `count: 3` is checked against the body, not read off the tool's own output: no silent loss, no duplication. `paging_total: 9` next to `count: 3` is consistent, not a contradiction, because `total` counts **modules** on this route (§3 of `27-JOBS.md`); the same run also carried the feed → `get_job` chain, two ids out of the feed answering with their details. **What this ✅ does NOT cover**, and none of it may be widened: the **read-error** path (a wrapper present, its card unresolvable) — `discarded: 0`, it never fired, fixture-proven; the **partial-loss** path, for the same reason; the chokepoint for an **inlined object in the starred list** — offline-proven, it did not occur in this run; and the state table beyond `hits`. Three more limits, named by the owner when he scoped what his run may carry: **pagination** is untested — `paging_total: 9` next to five modules means a second page exists and it was never fetched, so whether `start: 5` answers in the same shape is unknown; only **`VERTICAL_LIST`** is proven as a job carrier — `SINGLE` and `TABBED` appeared solely as advertising, upsell and a collection, so whether a `TABBED` module ever carries job cards is open, and if it does, today's silent skip would be a loss rather than correct behaviour; and the **`jobPostingCard` union branch** beside `jobPostingCardWrapper` was `null` throughout and has never run against a live body. In his words, the ✅ holds "for the start page of a feed with mixed modules" — anything beyond that would again be wider than the measurement. Still open and measured by review probes, not by red tests: `27-JOBS.md` §6 — the one to know about is that an entity the reader does not recognise as a module can still be projected into a card whose id comes from a foreign position. That is **narrowed but not closed**: an entry the starred list names by **URN** — the measured shape — is now `drift`/`ok=false` instead of a card, and an object standing **inlined** in the starred list is too, both held by tests; the remaining reach is the same shape on the **non-starred** (search) path, and that one is an open owner decision, not a defect this ticket may close (§6 item 10, `BACKLOG.md`). Historical, kept because it is the reason the tool is trusted here: the **honesty** behaviour was ✅ on 2026-07-30 already, when a container-less 200 was reported as `state: "unknown"`, `ok: false` and **not** as `empty` |
 | Job posting (detail) | `jobs/jobPostings/{id}?decorationId=…WebFullJobPosting-65` (legacy Rest.li, **not** the dash resource, **not** GraphQL) | ✅ 200 (owner-run) — MCP `get_job`, flat projection confirmed against real data; **plus** ✅ 404 (owner-run) for a non-existent id: honest error, requested `job_id` unchanged. That is the **404 path only** — the id-**mismatch** abort remains fixture-proven and was explicitly *not* exercised. Details and the field-level evidence in the live-run note below and `27-JOBS.md` |
 | Company page | `graphql voyagerOrganizationDashCompanies` | 🔍 |
 | Events | `graphql voyagerEventsDashEventsCardGroupResource` | 🔍 |
@@ -85,8 +93,9 @@ was deleted again, so treat that artifact as possibly still standing.
 
 > **Jobs live-run note — the first ✅ in this repo that came from the owner's session (owner-run,
 > see the legend).** Two paths of `get_job` were executed and one behaviour of
-> `get_job_recommendations` was observed. What follows is the whole of it; nothing beyond it changed
-> status.
+> `get_job_recommendations` was observed on 2026-07-30; the feed **read** itself was executed later,
+> on 2026-07-31 against `75afead` (point 4). What follows is the whole of it; nothing beyond it
+> changed status.
 >
 > **1. `get_job`, real id → HTTP 200.** The legacy Rest.li route with
 > `decorationId=…WebFullJobPosting-65` answered 200 and the flat projection held up on real data.
@@ -124,12 +133,40 @@ was deleted again, so treat that artifact as possibly still standing.
 > was empty or not entitled, or whether an in-band error arrived with a 200. So the **endpoint stays
 > open** (`BACKLOG.md`), while the tool's honesty is verified.
 >
-> **Follow-up, owner-run 2026-07-31 — the shape question is answered, the endpoint question is not.** The
+> **Follow-up (a), owner-run 2026-07-31, the measured body — the shape question is answered.** The
 > owner measured a body of this route himself: the container sits at `data.data.jobsDashJobsFeedAll` and
 > its entry list is `*elements`, which the reader of 07-30 did not accept — a mechanism that produces
 > exactly the observed `unknown`. That is the **mechanism**, not proof about the 07-30 body: it was never
-> kept. A reader for the measured three-hop chain now exists and is proven **offline** only
-> (`27-JOBS.md` §1.3, §4.2), so this adds a 🔍 for the shape and **no ✅** for anything.
+> kept. A reader for the measured three-hop chain was written against that measurement and was, at that
+> point, proven **offline** only (`27-JOBS.md` §1.3, §4.2) — a 🔍 for the shape and **no ✅**.
+>
+> **4. Follow-up (b), owner-run 2026-07-31 against `75afead` — the feed read EXECUTED, HTTP 200, and
+> this is the ✅.** A separate run from (a), and the distinction is the whole point: (a) was a body the
+> owner read, this one is the tool running on a body. He cleared the bytecode cache first, so the run
+> belongs to that commit's code and not to a stale artefact. `get_job_recommendations(5)` returned
+> `status 200`, `ok: true`, `state: "hits"` (it was `unknown` on 07-30), `count: 3`, `read_entries: 5`,
+> `discarded: 0`, `paging_total: 9`, `endpoint voyager.graphql.jobsFeed`. Three cards came back with
+> title, employer and location — public job adverts, and only the fields the proof needs are recorded
+> here: job `4441501850` (Universum Managementges. mbH, Bremen), `4438192247` (Stellenwert GmbH & Co.
+> KG, Oldenburg), `4446987819` (Robert Walters, Vechta). **Four things this run actually establishes**,
+> each with its own witness rather than by looking at the tool's output alone:
+> *(i)* the **count is checked against the raw body** — the owner counted `jobPostingCardWrapper`
+> himself, three across five modules, next to `count: 3`, `read_entries: 5`, `discarded: 0`: no silent
+> loss and no duplication;
+> *(ii)* the **silent route works on real data** — advertising, upsell, a `TABBED` collection and an
+> empty module were skipped without producing an error;
+> *(iii)* the **`' · '` split works on real data** — `primaryDescription` = "Universum Managementges.
+> mbH · Bremen, Deutschland (Vor Ort)" separated into `company` and `location`;
+> *(iv)* the **chain feed → `get_job` holds** — ids taken out of the feed answered through `get_job`
+> with their details (e.g. "Leiter Support Operations (m/w/d) | Stellenwert GmbH & Co. | Vollzeit |
+> remote=False"). And `paging_total: 9` standing next to `count: 3` is not a contradiction: `total`
+> counts **modules** here (five of nine on this page), which is the distinction §3 of `27-JOBS.md`
+> exists for.
+> **What this run does NOT make ✅**, listed so nobody widens it: the **read-error** path (a wrapper
+> present whose card does not resolve) — `discarded: 0`, so it never fired and stays fixture-proven;
+> the **partial-loss** path, same reason; the chokepoint for an **object standing inlined in the
+> starred list** — proven offline, it did not occur in this run; and every state other than `hits`.
+> `search_jobs` / P1b is untouched by this and still does not exist.
 >
 > **Separately — a different, REST-like form measured 400.** The owner also tried
 > `voyagerJobsDashJobsFeed?decorationId=com.linkedin.voyager.dash.deco.jobs.JobsFeed-2&count=5&q=jobsFeed&start=0`

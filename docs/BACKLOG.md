@@ -505,16 +505,29 @@ Not to be re-admitted as facts: the vgreq-header cause of the SDUI 500 (unverifi
 `currentActor` cause (a red herring per
 `mcp/lib/client.py:433-434`); carry the latter as one causeless class "SDUI replay incomplete".
 
-## 🔍 Jobs recommendations — the shape is measured, the read is not live-proven
+## ✅ Jobs recommendations — the read is LIVE-VERIFIED; what is left are decisions, not the endpoint
 
-**Status 2026-07-31 (owner-run — provenance and scope: `STATUS-MATRIX.md`, legend entry "(owner-run)").**
-The owner measured the **response shape** of the feed route himself (`count:5`,
-`queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`): the container is
+**Status 2026-07-31 (owner-run against `75afead` — provenance and scope: `STATUS-MATRIX.md`, legend
+entry "(owner-run)").** The endpoint is **verified usable** and the read is ✅. The owner ran
+`get_job_recommendations(5)` in his own session, after clearing the bytecode cache so the run is
+attributable to that commit's code: **HTTP 200**, `ok: true`, `state: "hits"`, `count: 3`,
+`read_entries: 5`, `discarded: 0`, `paging_total: 9`, `endpoint voyager.graphql.jobsFeed`. He counted
+`jobPostingCardWrapper` in the **raw** body himself — three in five modules — so the count is checked
+against the body and not against the tool's own output; the silent route (advertising, upsell, `TABBED`,
+empty module) and the `' · '` split into `company`/`location` both held on real data, and ids out of the
+feed answered through `get_job`. Details and the four cross-checks: `27-JOBS.md` §4.0.
+
+**Not covered by that ✅, and it stays fixture-proven:** the read-error path (`discarded: 0`, never
+triggered), the partial-loss path, the chokepoint for an object inlined in the starred list, and every
+state other than `hits`.
+
+**The earlier layer, kept because the reader was built on it (owner-run 2026-07-31, the measured
+body — a different run):** the owner measured the **response shape** of the feed route himself
+(`count:5`, `queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`): the container is
 `data.data.jobsDashJobsFeedAll` with a starred entry list, and the chain has **three** hops —
 `*elements` points at **jobs-feed modules**, each module carries an embedded list of 18-branch unions,
 and only the `jobPostingCardWrapper` / `jobPostingCard` branch leads to the job card
-(`27-JOBS.md` §1.3). A reader for that chain exists and is proven **offline** against a fixture of the
-measured form.
+(`27-JOBS.md` §1.3).
 
 **What is open, in the order it should be worked:**
 
@@ -536,12 +549,15 @@ measured form.
    object there is `unread`, `state="drift"`, `ok=False`, whatever it contains. Pinned by
    `test_an_inlined_object_inside_the_starred_list_never_becomes_a_card`, and the search route is
    untouched because it arrives through a non-starred `elements` list.
-   **Still open, measured by review probes, no test pins it:**
-   (b) the same entity in a **non-starred `elements` list** with its job branch below the one-level
-   witness. This is **pre-existing search-route behaviour** — the baseline parser answers identically —
-   and this ticket's scope forbids touching that route; it is recorded so it is not misread as a
-   regression, and closing it is a separate owner decision.
-   `27-JOBS.md` §6 item 10.
+   **(b) OPEN OWNER DECISION — the remaining case, in the NON-STARRED list.** The same entity in a
+   **non-starred `elements` list** with its job branch below the one-level witness. This is
+   **pre-existing search-route behaviour** — the baseline parser answers identically — and it is
+   measured by a review probe, with no test pinning it. **It is deliberately left open, and it is not
+   an untidy leftover to be cleaned up.** The owner's position, and the reason: without an **origin
+   signal** the case is not decidable — the starred key is what made reach (a) decidable, and the
+   non-starred list offers no equivalent. Inventing a fourth witness to decide it anyway would be
+   exactly the error this whole series closes. He will report it **with a measurement** if he meets it
+   in operation; until then nobody guesses a rule for it. `27-JOBS.md` §6 item 10.
 2. **A failed hop A is not fail-closed and blames the wrong cause.** A module URN out of `*elements`
    that does not resolve in `included[]`, or that resolves **twice**, is counted as `discarded` with
    `ok=True` and a `reason` that says "no identifying job id at a readable position" — while behind that
@@ -560,31 +576,38 @@ foreign-identity fall-through for entries the starred list names by **URN** (ite
 see point 1 above). All of them are held by tests now; `27-JOBS.md` §4.2 lists which.
 4. **One owner decision, not a defect:** an **empty** entry list next to `paging.total > 0` still reads
    `drift`/`ok=False`, and two tests pin that. On the feed a cursor page past the end looks exactly like
-   this, so it may belong with the withdrawn invariant. Withdraw it for the feed (→ `empty`) or keep it
-   as a deliberate feed special case; either way the tests move with it. `27-JOBS.md` §6 item 9.
-5. **The live read that would make the feed a verified read** (a decision sheet, not a task for an
-   agent): one `get_job_recommendations(count=5)` in the owner's own session against the same queryId,
-   comparing `state`, `count`, `skipped`, `lost`, `unread` and the card titles with his measurement. Cost: one
-   GET on his own account. Risk: the queryId hash may have rotated, which answers 4xx with the
-   rotation hint and no side effect. `27-JOBS.md` §7.
+   this, so it may belong with the wrongly transferred invariant below. Drop it for the feed (→ `empty`)
+   or keep it as a deliberate feed special case; either way the tests move with it. `27-JOBS.md` §6 item 9.
+5. **DONE — the live read that makes the feed a verified read.** Executed by the owner on 2026-07-31
+   against `75afead`: `get_job_recommendations(5)`, HTTP 200, `state: "hits"`, three cards out of five
+   modules, cross-checked against the raw body. See the status paragraph at the top of this entry and
+   `27-JOBS.md` §4.0. Nothing is left to run here; what a further call could still add is the **raw
+   body** (item 3 of `27-JOBS.md` §6), which the tool deliberately never returns.
 
-**The invariant that was WITHDRAWN here, so it does not creep back in:** "`paging.total > 0` next to zero
-results is an error" is **false for the feed**, because `total` counts **modules** — a promotion-only feed
-is `state="empty"`, `ok=True`, and two tests hold that (`27-JOBS.md` §3). It stays plausible for the
-**search** route (`voyagerJobsDashJobCards`), where `total` counts jobs. Do not merge the two arithmetics
-again, and do not "fix" the empty verdict back.
+**The invariant that was WRONGLY TRANSFERRED here, so it does not creep back in:** "`paging.total > 0`
+next to zero results is an error" is **false for the feed**, because `total` counts **modules** — a
+promotion-only feed is `state="empty"`, `ok=True`, and two tests hold that (`27-JOBS.md` §3). It stays
+plausible for the **search** route (`voyagerJobsDashJobCards`), where `total` counts jobs. **How it got
+here, named because a vague record invites a re-run of the mistake:** the **main session** carried the
+rule over from the search route to the feed without checking what the counter counts there, and held it
+as binding across several tickets; the owner's measurement refuted it. This was **not** a request the
+owner withdrew — it was a transfer that was wrong at this place. (Not to be confused with the cookie
+inventory / `session_status` entry above, which genuinely **was** withdrawn by the owner.) Do not merge
+the two arithmetics again, and do not "fix" the empty verdict back.
 
-### The 2026-07-30 layer of this entry (unchanged, and still the reason the endpoint is open)
+### The 2026-07-30 layer of this entry (history — this is why the endpoint WAS open)
 
-**Status 2026-07-30 (owner-run):** the tool is fine, the endpoint is not. Separate the two layers, they
-are not the same finding:
+**Status 2026-07-30 (owner-run), superseded on 2026-07-31 by the executed read above:** the tool was
+fine, the endpoint was not. Separate the two layers, they were not the same finding:
 
 - **The tool is ✅ verified honest.** On a live **HTTP 200** whose body held no collection container
   under `data`, `get_job_recommendations` reported `state: "unknown"`, `count: 0`, `read_entries: 0`,
   `paging_total: null`, `ok: false` with the re-capture note — and **not** `empty`. The false success
   that caused the first hand-back (`ok=True, count=0, "a genuinely empty page"`) is structurally dead,
   demonstrated on a real body. Nothing to do here.
-- **The endpoint is NOT verified usable** and stays open: it answered and delivered no readable jobs.
+- **The endpoint was NOT verified usable then:** it answered and delivered no readable jobs. That is
+  **closed** — the run of 2026-07-31 against `75afead` read three cards out of a real body (top of this
+  entry).
 
 **The missing artifact of that run: the raw response body of the 200.** Three explanations were open and
 the body decides between them — (a) the response shape drifted and the container sits under a different
@@ -615,7 +638,14 @@ That is a finding about **that form**. The tool never sends it — it builds the
 owner's own 200 proves the tool's route is not the 400 one: a 400 from the tool would have produced the
 `HTTP {status} for the jobs feed` branch with the queryId-rotation hint, not the container note.
 
-## ❌ `search_jobs` (P1b) — the capture exists on the owner's host, not in this repo
+## ❌ `search_jobs` (P1b) — open and explicitly NOT urgent; the capture exists on the owner's host
+
+**Priority note 2026-07-31 (the owner's own, and it is the reason this entry stays where it is).** The
+card **projection** for the search route carries; the **request path** — the route and its filter
+grammar — is what is missing. The owner states there is **no urgency for his operation**: mail plus the
+recommendation feed give him the coverage he needs, and the feed is now a verified read (the entry
+above). So this is recorded as **open and not urgent**, not as a gap to be closed under time pressure —
+and **his session stands ready for captures** whenever the request path is wanted.
 
 **Status 2026-07-30:** not built, and still not buildable **here**. The owner reports he produced a
 capture of a real job search. It lives on **his** host; it is **not present in this clone** (searched

@@ -5,25 +5,32 @@ recommendation feed for the owner. Browserless (pure `requests` through `vgreq`)
 gate — reads never get one — and registered on the READ side of the read-only split
 (`mcp/tests/test_readonly.py`).
 
-**Status of this document (two owner runs; provenance and its scope: `STATUS-MATRIX.md`, legend entry
-"(owner-run)").** The picture is not uniform, so read the four lines separately:
+**Status of this document (three owner runs; provenance and its scope: `STATUS-MATRIX.md`, legend entry
+"(owner-run)").** The picture is not uniform, so read the five lines separately:
 
 - **`get_job` is ✅ live-verified** (owner-run 2026-07-30 against `5a251da`), on two paths: **HTTP 200**
   for a real job id with the flat projection holding up on real data, and **HTTP 404** for an invented
   one with an honest error that keeps the requested `job_id`. That is the 404 path only — the
   id-**mismatch** abort was *not* exercised and stays fixture-proven.
-- **`get_job_recommendations` is ✅ only for its honesty** (same run): on a live 200 without a findable
-  container it reported `state: "unknown"`, not `empty`. The **endpoint** is a different matter — it
-  answered but yielded no usable jobs, so it is **not verified usable**.
-- **The SHAPE of the feed body is now known — 🔍, owner-run 2026-07-31.** The owner measured the
-  response of the feed route himself (`count:5`,
+- **`get_job_recommendations` was ✅ only for its honesty** on that run: on a live 200 without a findable
+  container it reported `state: "unknown"`, not `empty`. That is history now — see the next two lines —
+  but it is the reason the tool's output is taken at face value below.
+- **The SHAPE of the feed body became known — 🔍, owner-run 2026-07-31 (the measured body).** The owner
+  measured the response of the feed route himself (`count:5`,
   `queryId voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815`) and reported the container path,
   the module and card key sets, the union branch names and the values of one card. The chain has
-  **three** hops, not two, and `*elements` points at **modules**, not at job cards (§1.3). This is the
-  owner's measurement of a **body**, not a run of this parser: **nothing in this section is ✅**, and
-  the reading code below is **not yet live-tested**.
-- **Everything else below is offline evidence**: the identity table, the state table beyond `unknown`,
-  the container-selection rules, the whole feed module/card projection, the description cut with its
+  **three** hops, not two, and `*elements` points at **modules**, not at job cards (§1.3). This was the
+  owner's measurement of a **body**, not a run of this parser.
+- **`get_job_recommendations` is now ✅ live-verified as a READ — owner-run 2026-07-31 against
+  `75afead`** (a second, separate run of that date: the tool executing, not a body being read). **HTTP
+  200**, `ok: true`, `state: "hits"`, `count: 3`, `read_entries: 5`, `discarded: 0`, `paging_total: 9`.
+  The three-hop projection produced correct cards on real data, and the count was checked against the
+  **raw** body rather than against the tool's own output. The **endpoint is verified usable**. What that
+  ✅ does not reach — the read-error path, the partial-loss path, the inlined-object chokepoint and every
+  state other than `hits` — is named in §4.0.
+- **Everything else below is offline evidence**: the identity table, the state table beyond `unknown`
+  and `hits`, the container-selection rules, every failure branch of the feed projection (a card that
+  does not resolve, a partial loss, a form that was not understood), the description cut with its
   `description_truncated` flag and every `company`-join case — the reference join and the sole-company
   fallback alike — are proven against **fixtures** only (the feed fixture reproduces the owner's
   measured form and says in its own `_provenance` which values are his and which are synthetic).
@@ -78,11 +85,13 @@ Both variants are in the endpoint catalogue (`data/endpoints_voyager.json`, sect
 `voyagerJobsDashJobsFeed`) with a captured response of ~110 KB. The hashes are held as
 `LinkedInClient._JOBS_FEED_QID` and `_JOBS_FEED_PAGE_QID`.
 
-**Live status (owner's run, 2026-07-30): this route answered HTTP 200 — and delivered nothing this
-repo could read.** The tool reported `state: "unknown"` (see §4, "What the live run added"). So the
-route is executed but **not verified usable**.
+**Live status: ✅ verified usable (owner-run 2026-07-31 against `75afead`, HTTP 200).** The tool read
+three job cards out of five modules on a real body — the numbers and their independent witnesses are in
+§4.0. **The earlier picture, kept because it is the reason the reader looks the way it does:** on
+2026-07-30 the same route answered HTTP 200 and delivered nothing this repo could read; the tool
+reported `state: "unknown"`, so the route was executed but **not** verified usable then.
 
-**What the second owner run (2026-07-31) changed about that:** the owner measured a body of this route
+**What the second owner run (2026-07-31, the measured body) changed about that:** the owner measured a body of this route
 himself, and it *does* carry a container — under `data.data.jobsDashJobsFeedAll`, whose entry list is
 called **`*elements`** (Rest.li's star: a list of URNs resolved through `included[]`). The reader of
 2026-07-30 accepted only the unstarred `elements`, which is a mechanism that produces exactly the
@@ -162,8 +171,9 @@ The measured run, module by module (this table is the shape of `mcp/tests/fixtur
 | 3 | `SINGLE` | 1 | `*promotionalCard` | `null` |
 | 4 | `TABBED` | 4 | `tabbedCollection` ×4 | a title |
 
-So a feed of five entries answers with three jobs. That arithmetic is the reason for the withdrawn
-invariant in §3.
+So a feed of five entries answers with three jobs. That arithmetic is the reason for the
+wrongly-transferred invariant in §3 — and the owner's executed run of 2026-07-31 produced exactly that
+shape on a real body: five modules, three cards (§4.0).
 
 ---
 
@@ -368,19 +378,27 @@ Additional invariant: "empty" may only be claimed because it was **read** — a 
 entity itself carries, at any depth, not a pick from the entity pool (see the next section); a **feed**
 card has no company to join at all (§1.3).
 
-### The withdrawn invariant — `paging.total` counts different things on the two routes
+### The wrongly transferred invariant — `paging.total` counts different things on the two routes
 
-An earlier rule of this repo said: *`paging.total > 0` next to zero results is an error.* **For the feed
-that is wrong, and the owner measured why:** `paging` sits on the same node as `*elements`, but `total`
+A rule of this repo said: *`paging.total > 0` next to zero results is an error.* That rule belongs to
+the **search** route. It was **wrongly transferred from the search route, where `total` counts jobs, to
+the feed, where it counts modules** — transferred without checking what the counter counts there. The
+authorship belongs named, and it is not the owner's: the **main session** carried the rule over and set
+it as binding across several tickets; the owner's measurement is what refuted it. It was never
+"withdrawn" in the sense of a preference reconsidered — at this place it was simply **false**, and
+recording it as a withdrawal would read in six months like a matter of taste.
+
+**Why it is false for the feed:** `paging` sits on the same node as `*elements`, but `total`
 counts **modules, not job cards**. A feed with five modules can mean three jobs and two advertising
-slots (§1.3). So `paging_total > 0` next to `count: 0` is the **normal case** of a pure promotion feed:
-`state="empty"`, `ok=True`, no `reason`, no error. Pinned by
+slots (§1.3) — the owner's executed run measured exactly that, `paging_total: 9` next to `count: 3` and
+five modules read (§4.0). So `paging_total > 0` next to `count: 0` is the **normal case** of a pure
+promotion feed: `state="empty"`, `ok=True`, no `reason`, no error. Pinned by
 `test_a_pure_promotion_feed_with_a_paging_total_is_empty_and_not_an_error` (parser) and
 `test_a_pure_promotion_feed_is_not_an_error_at_the_client_boundary` (tool).
 
-Two boundaries of that withdrawal, and neither may be widened by accident:
+Two boundaries of that correction, and neither may be widened by accident:
 
-- **It is withdrawn for the FEED route only.** On the **search** route (`voyagerJobsDashJobCards`)
+- **The rule is false for the FEED route only.** On the **search** route (`voyagerJobsDashJobCards`)
   `paging.total` counts **jobs** (the owner measured 129 at `count:5`), so there the old rule stays
   plausible. That route is untouched here. Do not merge the two arithmetics again.
 - **What survives even on the feed:** an entry list that is **empty** next to a candidate reporting
@@ -398,10 +416,12 @@ resolve (`state="card_lost"`).
 
 ### 4.0 What the live runs added (owner-run)
 
-Two runs, and they prove different kinds of thing. **2026-07-31** contributed a measured **body shape**
-(the three-hop chain of §1.3) — a shape, not a verdict of this code: the parser that reads it has never
-run live, so it produces **no ✅ anywhere**. Its content is written out in §1.3 and is not repeated here.
-**2026-07-30** contributed executed **calls**, and that is what the rest of this subsection is about.
+Three runs, and they prove different kinds of thing. **2026-07-31 (the measured body)** contributed a
+body **shape** (the three-hop chain of §1.3) — a shape, not a verdict of this code, so on its own it
+produced **no ✅**. Its content is written out in §1.3 and is not repeated here. **2026-07-30** and
+**2026-07-31 against `75afead`** contributed executed **calls**, and that is what the rest of this
+subsection is about. Keep the two runs of 2026-07-31 apart: one is a body the owner read, the other is
+this code running.
 
 #### 2026-07-30, against commit `5a251da`
 
@@ -445,8 +465,61 @@ which caused the first hand-back: the earlier version would have answered
 `ok=True, count=0, "a genuinely empty page"` on this very body. **What this does not prove:** that the
 endpoint is usable. It answered and delivered no readable jobs, and the **raw body was not kept** —
 without it, "the response shape drifted (another container key)", "the feed was empty or not entitled"
-and "an in-band error arrived with a 200" are all still open. The tool is verified honest; the endpoint
-is not verified usable (`BACKLOG.md`).
+and "an in-band error arrived with a 200" were all still open **at that date**. The tool was verified
+honest; the endpoint was not verified usable. That second half is what the next run settled.
+
+#### 2026-07-31, against commit `75afead` — the feed read, executed
+
+**This is the run that makes `get_job_recommendations` a ✅ read**, and it is a different run from the
+measured body of the same date: there the owner read a body, here he ran the tool. He cleared the
+bytecode cache before the run, so what answered is that commit's code and not a stale artefact.
+
+`get_job_recommendations(5)` returned `status 200`, `ok: true`, `state: "hits"` — `unknown` on
+2026-07-30 — with `count: 3`, `read_entries: 5`, `discarded: 0`, `paging_total: 9` and
+`endpoint voyager.graphql.jobsFeed`. The three cards, recorded with no more detail than the proof needs
+(public job adverts; employer names and job titles are public listing data, and nothing beyond the job
+ids identifies anything):
+
+| `job_id` | title | employer | location |
+|---|---|---|---|
+| 4441501850 | Leitung IT/Systemadministration (w/m/d) | Universum Managementges. mbH | Bremen (on site) |
+| 4438192247 | Leiter Support Operations (m/w/d) | Stellenwert GmbH & Co. KG | Oldenburg (hybrid) |
+| 4446987819 | Teamleiter IT (m/w/d) | Robert Walters | Vechta (remote) |
+
+**What carries the proof is not the output but the cross-checks the owner ran against it.** Four of
+them, and each one closes a different way of being wrong:
+
+- **The count was checked against the raw body.** He put the raw response next to the result and
+  counted `jobPostingCardWrapper` himself: **three in five modules**, against the tool's `count: 3`,
+  `read_entries: 5`, `discarded: 0`. That is an independent count of the body, not a reading of the
+  tool's own report — so neither a silent loss nor a duplication is compatible with it. This is the
+  cross-check §2 asks for when it calls `read_entries`/`discarded` "the balance against the raw list".
+- **The silent route works on real data.** Advertising, upsell, a `TABBED` collection and the empty
+  module were skipped **without an error** — the "expectable siblings" level of §2, until now measured
+  only in a fixture of the owner's earlier body.
+- **The `' · '` split works on real data.** `primaryDescription` = "Universum Managementges. mbH ·
+  Bremen, Deutschland (Vor Ort)" separated into `company` and `location`, which is the one projection
+  rule of §2 that has no second source to fall back on: a feed body carries no `Company` entity.
+- **The chain feed → `get_job` holds on real ids.** With ids out of the feed he ran `get_job` and got
+  the postings back ("Leiter Support Operations (m/w/d) | Stellenwert GmbH & Co. | Vollzeit |
+  remote=False"; "Teamleiter IT (m/w/d) | Robert Walters | Vollzeit | remote=True"). The feed delivers
+  the id, `get_job` the detail — so the `job_id` the feed mints out of the card's own `entityUrn` is a
+  usable identity and not merely a well-formed string.
+
+And the arithmetic that used to look like a defect stands there consistently: `paging_total: 9` next to
+`count: 3`, five modules of nine on this page. That is §3 measured rather than argued.
+
+**What this run does NOT make ✅.** Each of these stays fixture-proven, and none of them may be widened
+on the strength of a green run:
+
+- **The read-error path** — a `jobPostingCardWrapper` present whose card does not resolve. `discarded`
+  was `0`, so it was never triggered.
+- **The partial-loss path**, for the same reason.
+- **The chokepoint for an object standing inlined in the starred list** — proven offline (§4.2), and it
+  did not occur in this body.
+- **Every state other than `hits`.** `empty`, `unknown`, `ambiguous`, `card_lost` and `drift` are what
+  the tests hold, not what this run showed.
+- **`search_jobs` / P1b does not exist** and nothing here changes that (§5).
 
 ### 4.1 Proven offline
 
@@ -490,7 +563,7 @@ is not verified usable (`BACKLOG.md`).
   there is no container, `drift` when the entries carry no identifying id — including a container
   of URN strings, which is **never** an empty page — or when `paging_total > 0` stands next to an
   **empty entry list** (`test_paging_total_above_zero_with_no_hits_is_an_error_not_an_empty_list`, whose
-  body carries no entry at all; that is the surviving half of the withdrawn invariant, §3);
+  body carries no entry at all; that is the surviving half of the wrongly transferred invariant, §3);
 - partial loss is named: `read_entries` / `discarded` balance against the raw container and the
   `reason` says how many entries were dropped;
 - `paging_total` is read from the chosen container only, and a `paginationToken` hanging off a card
@@ -509,15 +582,18 @@ is not verified usable (`BACKLOG.md`).
 Everything here is **offline** evidence for the shape of §1.3: passing tests in
 `mcp/tests/test_jobs_parse.py` (parser) and `mcp/tests/test_client.py` (the tool boundary) against
 `mcp/tests/fixtures/jobs_feed_modules.json`. The fixture's own `_provenance` separates the owner's
-measured values from the synthetic additions. **No live run of this code exists** — see §7.
+measured values from the synthetic additions. A live run of this code now **does** exist (§4.0), and it
+covers the `hits` path and nothing else — everything below that is not that path is offline evidence,
+exactly as it was.
 
 Held by passing tests:
 
 - **the owner's whole five-module run reads exactly its three job cards**, with title and employer, and
   the advertising siblings silently skipped
   (`test_the_measured_five_module_feed_reads_exactly_its_three_job_cards`, and at the tool boundary
-  `test_get_job_recommendations_reads_the_owner_measured_module_feed`);
-- **the withdrawn invariant stays withdrawn**: a promotion-only feed with a `paging.total` is `empty`,
+  `test_get_job_recommendations_reads_the_owner_measured_module_feed`) — this is the one item of this
+  list that the executed run of 2026-07-31 also confirms **live**, with the same arithmetic (§4.0);
+- **the corrected invariant stays corrected**: a promotion-only feed with a `paging.total` is `empty`,
   `ok=True`, without a `reason` — in the parser and at the tool boundary
   (`test_a_pure_promotion_feed_with_a_paging_total_is_empty_and_not_an_error`,
   `test_a_pure_promotion_feed_is_not_an_error_at_the_client_boundary`);
@@ -588,23 +664,26 @@ Held by passing tests, added when the losses above were closed:
 
 **What the green does not reach.** The chokepoint above closes the foreign-identity class for entries
 that arrive as a **URN string** in the starred list, which is the measured feed shape; it does **not**
-close the class as such. Two reaches are measured by review probes against this tree and are open: an
-entry that stands **inlined as an object inside the starred `*elements` list** still takes the old path,
-and so does a drifted entity in a non-starred `elements` list whose job branch sits deeper than the
-one-level witness looks. Both mint a card id from a foreign `trackingUrn` and report `hits`/`ok=True` —
-§6 item 10, which is why this subsection does not claim the class is closed. `count` on the feed path is
+close the class as such. A second reach — an entry standing **inlined as an object inside the starred
+`*elements` list** — was closed on 2026-08-01 by keying the decision on the starred **container key**
+rather than on an entry's runtime type, and a test pins it. **One reach is still open:** a drifted
+entity in a non-starred `elements` list whose job branch sits deeper than the one-level witness looks
+still mints a card id from a foreign `trackingUrn` and reports `hits`/`ok=True` — §6 item 10 (b), which
+is why this subsection does not claim the class is closed. That one is search-route behaviour and an
+owner decision, not a feed defect. `count` on the feed path is
 a closed quantity against every shape listed above, and **not** against a body carrying the same
 `job_id` twice (§6 item 12).
 
 **Not proven, and it matters:**
 
-- **The feed's reading code has never run against LinkedIn.** The 2026-07-31 evidence is a **body**
-  measured by the owner; the parser that reads it is proven against a fixture of that body only. The one
-  call that would settle it is written out in §7.
+- **The feed's reading code has met LinkedIn exactly once, on the `hits` path** (owner-run 2026-07-31
+  against `75afead`, §4.0). Every branch that run did not walk — a card that does not resolve, a
+  partial loss, a form that was not understood, and every state other than `hits` — is proven against a
+  fixture of the owner's measured body and nothing more.
 - **Live evidence covers exactly the items in §4.0 and nothing else.** Every other statement in
   this document is "the request we would send" and "how we parse a body of that shape". In particular:
-  the **id-mismatch abort**, the `ambiguous` / `drift` / `absent` states, every container-selection rule
-  and every negative `company`-join case were **not** exercised live.
+  the **id-mismatch abort**, the `ambiguous` / `drift` / `absent` / `card_lost` states, every
+  container-selection rule and every negative `company`-join case were **not** exercised live.
 - **The fixtures under `mcp/tests/fixtures/` are synthetic and PII-free.** They prove the parser
   logic only — they are **not** evidence of LinkedIn's response form. Where a real body differs,
   the honest failure states (`unknown`, `drift`, `absent`) are what the tools will produce, and
@@ -640,6 +719,14 @@ on **his** host and is **not present in this clone** (searched for, not found). 
 does not have is not evidence the repo may build on: the route, the query string and every filter key
 stay unknown here, and the status of this section is unchanged. The next step is therefore not code —
 it is getting the capture file into the repo (`BACKLOG.md`).
+
+**Update 2026-07-31 — open, and explicitly not urgent (the owner's own priority).** The card
+**projection** for the search route exists and carries; what is missing is the **request** path — the
+route and its filter grammar. The owner states there is **no urgency for his operation**, because mail
+plus the recommendation feed already give him the coverage he needs, and the feed is now a verified read
+(§4.0). So this stays open rather than being pulled forward, and it is **not** a defect. His session
+stands ready for captures whenever the request path is wanted; nothing here is blocked on anything but
+that.
 
 ---
 
@@ -744,7 +831,7 @@ probe's answer is quoted with it.
    that remains for a caller who does pass one is bound to entries that are **not** modules and counts
    what it cuts in `dropped`, naming it in `reason` (`mcp/lib/jobs_parse.py:1308-1312`, in
    `read_job_collection`). Two tests hold it (§4.2).
-9. **The surviving half of the withdrawn invariant is an owner decision, not a settled rule.** An empty
+9. **The surviving half of the wrongly transferred invariant is an owner decision, not a settled rule.** An empty
    entry list next to a candidate reporting `total > 0` still reads `drift`, `ok=False`
    (`mcp/lib/jobs_parse.py`, `read_job_collection`, the `not entries` branch), and two tests pin it
    (`test_paging_total_above_zero_with_no_hits_is_an_error_not_an_empty_list`, and at the tool boundary
@@ -752,7 +839,7 @@ probe's answer is quoted with it.
    shape has a plausible innocent cause: a cursor page **past the end** of the feed carries no module
    while `total` still counts the modules of the whole feed. The reading code's justification ("drift on
    either route") is written for two routes, but `read_job_collection` has exactly one caller today —
-   the feed. **Decision needed:** withdraw this half for the feed as well (then it becomes `empty`), or
+   the feed. **Decision needed:** drop this half for the feed as well (then it becomes `empty`), or
    keep it deliberately as a feed special case. Until then this document does not claim it is right; it
    claims only what the two tests hold, which is the current behaviour.
 10. **PARTLY CLOSED, and still the sharpest item on this list — an entry that is not recognised as a
@@ -777,28 +864,27 @@ probe's answer is quoted with it.
     still stand underneath it: the anchored `_CARD_URN_RE` (`mcp/lib/jobs_parse.py:153`) and
     `is_feed_card_module` recognising a module by the measured container key even when `$type` and URN
     prefix drift.
-    **What is NOT closed** — the chokepoint is keyed on the entry's runtime type (a URN string), not on
-    the starred container key, so two reaches remain, both measured by a review probe against this tree
-    and neither pinned by a test:
-    (a) an **object standing directly inside the starred `*elements` list** (instead of the measured URN
-    string): the same drifted entity answers `ok=True`, `state="hits"`, one result with `job_id 7777777`
-    and the foreign title, and the real card inside it falls away silently. In a **mixed** list — one
-    real module URN plus that object — the answer is `ok=True`, `state="hits"`, two results, the foreign
-    identity standing next to a correctly read card with nothing marking the difference. That is the
-    worse of the two, because a caller sees a plausible page.
+    **(a) CLOSED 2026-08-01, and it used to be the worse of the two.** An **object standing directly
+    inside the starred `*elements` list** (instead of the measured URN string) answered `ok=True`,
+    `state="hits"` with `job_id 7777777` and the foreign title; in a **mixed** list the foreign identity
+    stood next to a correctly read card with nothing marking the difference, so a caller saw a plausible
+    page. The fix is the rule expressed one step more positively: the signal is the **starred container
+    key**, which the reader already computes (`container_entry_keys`), not an entry's runtime type. An
+    entry from a starred list is a feed entry whether it arrived as a URN or inlined, so an inlined
+    object there is `unread`, `state="drift"`, `ok=False`, whatever it contains. Pinned by
+    `test_an_inlined_object_inside_the_starred_list_never_becomes_a_card`.
+    **What is NOT closed** — one reach remains, measured by a review probe against this tree and not
+    pinned by a test:
     (b) the same drifted entity in a **non-starred, inlined `elements` list**, with its job branch
     deeper than the one-level `carries_a_job_branch` witness looks (`mcp/lib/jobs_parse.py:974`,
     consulted at `:1266`): `ok=True`, `state="hits"`, `job_id 7777777`. This one is **not** new with this
     reader — the same body answers the same way on the baseline parser — and it is the search route's
     projection semantics, which this ticket's scope forbids touching. It is written down here so it is
     not rediscovered as a regression.
-    Nothing in either reach is triggered by the owner's measured body; both are what a drifted body
-    would produce.
-    **What would close reach (a)** is the same rule expressed one step more positively: the signal is
-    the **starred container key**, which the reader already computes (`container_entry_keys`,
-    `mcp/lib/jobs_parse.py:585`), so an entry from a starred list is a feed entry regardless of whether
-    it arrived as a URN or inlined. Reach (b) is an owner decision about the **search** route and does
-    not belong in a feed change.
+    Neither reach is triggered by the owner's measured body; both are what a drifted body would
+    produce. Reach (b) is an owner decision about the **search** route and does not belong in a feed
+    change — without a provenance signal, feed and search are not distinguishable in that shape, and a
+    guessed fourth witness would be exactly the mistake this series closed.
 11. **CLOSED — `skipped` counted shapes that were not understood as "understood and job-free".** Three
     of them reached `state="empty"`, `ok=True`, `reason=None`: a module whose owner-measured
     `entitiesResolutionResults` key is **missing or not a list**, a union item that is not an object,
@@ -852,40 +938,32 @@ is closed against every shape §4.2 lists and **not** against a body naming the 
 (item 12). `company` on `get_job` is evidence-joined (see §4.1); on a **feed** card it is the first half
 of one measured string and there is nothing to join (§1.3).
 
-**What a live feed call would and would not settle now.** Items 1 and 3 were expected to be settled by
-the 2026-07-30 call and were not — that 200 offered no findable container and its body was not kept
-(§4.0). The owner's 2026-07-31 measurement settles the **shape** question they were waiting on (§1.3),
-so what is left for a live call is a different thing: whether **this reader** produces on a real body
-what it produces on the fixture. Items 7 to 13 are not waiting on any call — they are decisions and
-fixes in this repo, and none of them needs LinkedIn to be answered.
+**What the live calls did and did not settle.** Items 1 and 3 were expected to be settled by the
+2026-07-30 call and were not — that 200 offered no findable container and its body was not kept (§4.0).
+The owner's 2026-07-31 measurement settled the **shape** question they were waiting on (§1.3), and his
+executed run of the same date answered the remaining one: **this reader** does produce on a real body
+what it produces on the fixture, on the `hits` path. Neither call touches items 7 to 13 — they are
+decisions and fixes in this repo, and none of them needs LinkedIn to be answered. What a **further**
+call could still add is the raw body itself (item 3: whether a second, filled rail sits beside the feed
+container), which the tool deliberately never returns.
 
 ---
 
-## 7. The live call — executed, and what it left open
+## 7. The live calls — executed, and what they left open
 
-**This section is no longer a proposal for `get_job`.** The owner ran both tools on 2026-07-30 against
-`5a251da`; the results are in §4.0, the provenance rule in `STATUS-MATRIX.md`. Outcome in one line:
-`get_job` is verified on the 200 and the 404 path, the feed route answered 200 but read as
-`state: "unknown"`, so the recommendations **endpoint** was not settled then.
+**This section is a record, not a proposal.** The owner ran both tools on 2026-07-30 against `5a251da`
+and the feed read again on 2026-07-31 against `75afead`; the results are in §4.0, the provenance rule in
+`STATUS-MATRIX.md`. Outcome in two lines: `get_job` is verified on the 200 and the 404 path; the feed
+route answered 200 and read as `state: "unknown"` on 07-30, and on 07-31 the three-hop reader produced
+three correct cards out of five modules on a real body — so the recommendations **endpoint** is settled
+as **usable** and the read is ✅.
 
-**The three-hop reader has never met LinkedIn.** It was written from the owner's 2026-07-31 measurement
-of a body and is proven against a fixture of that body (§4.2). No session existed in the sessions that
-wrote it, and an outward call is not theirs to make — so this is a decision sheet, not a result:
+**What that leaves.** The one call that was written here as a decision sheet has been made, and it
+proved what it was expected to prove and no more: the `hits` path. It says nothing about what is still
+open in §6 — the reach item 10 keeps, item 12 and item 13 — which are decisions in this repo and need
+no call at all.
 
-- **What:** run `get_job_recommendations(count=5)` once, in the owner's own session, against
-  `voyagerJobsDashJobsFeed.8b4a94e0e9d8395f1e7482987dd2f815` — the same call he measured.
-- **What it would prove:** whether `state`, `count`, `skipped`, `lost`, `unread` and the card titles
-  come out of a **real** body the way they come out of the fixture. That, and only that, turns the
-  feed's form from 🔍 into a verified read. It says nothing about what is still open in §6 — the two
-  reaches item 10 keeps, item 12 and item 13 — which are decisions here.
-- **What can go wrong:** the `queryId` hash rotates with LinkedIn deployments; a rotated hash answers
-  4xx and the tool reports the queryId-rotation branch with the re-capture hint. No side effect either
-  way.
-- **Risk:** a GET on the owner's own account — nothing is created, changed or deleted. Residual risk is
-  the usual one of any authenticated read (rate limiting / session wear).
-- **Cost:** one request.
-
-**Still worth having in the same session, and cheap:** **keep the raw response body** of that 200 via
+**Still worth having in a future session, and cheap:** **keep the raw response body** of such a 200 via
 `tools/crawl_recursive.py` (the tool deliberately never returns bodies). It is the artifact that would
 show whether the measured shape is stable and whether a second, filled rail sits beside the feed
 container (§6 item 3). **Handling:** a captured feed body is private data — never commit it
